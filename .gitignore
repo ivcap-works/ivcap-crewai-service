@@ -1,0 +1,10 @@
+playground
+/_run_
+/.env
+/urn:ivcap:service:ai-tool.ddg-search.json
+__pycache__/
+.vscode/
+.dbg-env
+/db
+/log.txt
+system-view.png

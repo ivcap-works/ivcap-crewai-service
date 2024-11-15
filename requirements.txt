@@ -1,0 +1,5 @@
+crewai[tools]
+dataclass_wizard
+pydantic
+datamodel_code_generator
+ivcap_sdk_service

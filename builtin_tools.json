@@ -1,0 +1,117 @@
+{
+  "BrowserbaseLoadTool": {
+    "id": "builtin:BrowserbaseLoadTool",
+    "name": "BrowserbaseLoadTool",
+    "description": "Load webpages url in a headless browser using Browserbase and return the contents"
+  },
+  "CSVSearchTool": {
+    "id": "builtin:CSVSearchTool",
+    "name": "CSVSearchTool",
+    "description": "A tool that can be used to semantic search a query from a CSV's content."
+  },
+  "CodeDocsSearchTool": {
+    "id": "builtin:CodeDocsSearchTool",
+    "name": "CodeDocsSearchTool",
+    "description": "A tool that can be used to semantic search a query from a Code Docs content."
+  },
+  "DOCXSearchTool": {
+    "id": "builtin:DOCXSearchTool",
+    "name": "DOCXSearchTool",
+    "description": "A tool that can be used to semantic search a query from a DOCX's content."
+  },
+  "DirectoryReadTool": {
+    "id": "builtin:DirectoryReadTool",
+    "name": "DirectoryReadTool",
+    "description": "A tool that can be used to recursively list a directory's content."
+  },
+  "DirectorySearchTool": {
+    "id": "builtin:DirectorySearchTool",
+    "name": "DirectorySearchTool",
+    "description": "A tool that can be used to semantic search a query from a directory's content."
+  },
+  "EXASearchTool": {
+    "id": "builtin:EXASearchTool",
+    "name": "EXASearchTool",
+    "description": "A tool that can be used to search the internet from a search_query"
+  },
+  "FileReadTool": {
+    "id": "builtin:FileReadTool",
+    "name": "FileReadTool",
+    "description": "A tool that can be used to read a file's content."
+  },
+  "GithubSearchTool": {
+    "id": "builtin:GithubSearchTool",
+    "name": "GithubSearchTool",
+    "description": "A tool that can be used to semantic search a query from a github repo's content. This is not the GitHub API, but instead a tool that can provide semantic search capabilities."
+  },
+  "JSONSearchTool": {
+    "id": "builtin:JSONSearchTool",
+    "name": "JSONSearchTool",
+    "description": "A tool that can be used to semantic search a query from a JSON's content."
+  },
+  "MDXSearchTool": {
+    "id": "builtin:MDXSearchTool",
+    "name": "MDXSearchTool",
+    "description": "A tool that can be used to semantic search a query from a MDX's content."
+  },
+  "PDFSearchTool": {
+    "id": "builtin:PDFSearchTool",
+    "name": "PDFSearchTool",
+    "description": "A tool that can be used to semantic search a query from a PDF's content."
+  },
+  "PGSearchTool": {
+    "id": "builtin:PGSearchTool",
+    "name": "PGSearchTool",
+    "description": "A tool that can be used to semantic search a query from a database table's content."
+  },
+  "RagTool": {
+    "id": "builtin:RagTool",
+    "name": "RagTool",
+    "description": "A knowledge base that can be used to answer questions."
+  },
+  "ScrapeElementFromWebsiteTool": {
+    "id": "builtin:ScrapeElementFromWebsiteTool",
+    "name": "ScrapeElementFromWebsiteTool",
+    "description": "A tool that can be used to read a website content."
+  },
+  "ScrapeWebsiteTool": {
+    "id": "builtin:ScrapeWebsiteTool",
+    "name": "ScrapeWebsiteTool",
+    "description": "A tool that can be used to read a website content."
+  },
+  "SeleniumScrapingTool": {
+    "id": "builtin:SeleniumScrapingTool",
+    "name": "SeleniumScrapingTool",
+    "description": "A tool that can be used to read a website content."
+  },
+  "SerperDevTool": {
+    "id": "builtin:SerperDevTool",
+    "name": "SerperDevTool",
+    "description": "A tool that can be used to search the internet with a search_query."
+  },
+  "TXTSearchTool": {
+    "id": "builtin:TXTSearchTool",
+    "name": "TXTSearchTool",
+    "description": "A tool that can be used to semantic search a query from a txt's content."
+  },
+  "WebsiteSearchTool": {
+    "id": "builtin:WebsiteSearchTool",
+    "name": "WebsiteSearchTool",
+    "description": "A tool that can be used to semantic search a query from a specific URL content."
+  },
+  "XMLSearchTool": {
+    "id": "builtin:XMLSearchTool",
+    "name": "XMLSearchTool",
+    "description": "A tool that can be used to semantic search a query from a XML's content."
+  },
+  "YoutubeChannelSearchTool": {
+    "id": "builtin:YoutubeChannelSearchTool",
+    "name": "YoutubeChannelSearchTool",
+    "description": "A tool that can be used to semantic search a query from a Youtube Channels content."
+  },
+  "YoutubeVideoSearchTool": {
+    "id": "builtin:YoutubeVideoSearchTool",
+    "name": "YoutubeVideoSearchTool",
+    "description": "A tool that can be used to semantic search a query from a Youtube Video content."
+  }
+}
