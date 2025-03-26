@@ -1,5 +1,7 @@
-crewai[tools]
+crewai==0.108.0
+crewai-tools==0.38.1
 dataclass_wizard
 pydantic
 datamodel_code_generator
-ivcap_sdk_service
+ivcap-fastapi >= 0.3.0
+ivcap_ai_tool >= 0.5.7

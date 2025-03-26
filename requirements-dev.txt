@@ -1,1 +1,0 @@
-ivcap_sdk_service @ git+https://github.com/ivcap-works/ivcap-service-sdk-python/@v2
