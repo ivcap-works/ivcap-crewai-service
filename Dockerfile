@@ -16,7 +16,7 @@ RUN pip install -r requirements.txt
 # RUN pip install -r requirements-dev.txt --force-reinstall
 
 # Get service files
-ADD service.py ivcap_tool.py service_types.py ./
+ADD service.py ivcap_tool.py service_types.py vectordb.py ./
 
 # So we can run it with --user
 RUN mkdir /data && chmod 777 /data
@@ -27,13 +27,10 @@ RUN mkdir /.mem0 && chmod 777 /.mem0
 # VERSION INFORMATION
 ENV VERSION=0.0.1
 
-
-
 # ALERT!!! Should NOT copy keys into docker container
 ADD .env .
 
 # Command to run
-# Can't convince chromaDB to put the database file somewhere else
 ENV CREWAI_STORAGE_DIR=/data
-#RUN ln -s /data/out db
+
 ENTRYPOINT ["python", "/app/service.py"]

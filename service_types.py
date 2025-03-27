@@ -1,4 +1,5 @@
 from contextlib import redirect_stdout
+from dataclasses import dataclass
 import datetime
 import json
 import logging
@@ -11,6 +12,8 @@ from functools import reduce
 from typing import Any, Callable, ClassVar, Dict, List, Optional, Tuple, Union
 
 import sys
+from urllib.parse import urlencode, urljoin
+import requests
 from pydantic import Field, BaseModel
 from crewai import Agent, Task, Crew, Process, LLM
 from crewai.tasks import TaskOutput
@@ -22,20 +25,28 @@ from crewai.types.usage_metrics import UsageMetrics
 from langchain_core.agents import AgentAction, AgentFinish
 
 from ivcap_tool import ivcap_tool_test
+from vectordb import create_vectordb_config
+
+IVCAP_BASE_URL = os.environ.get("IVCAP_BASE_URL", "http://ivcap.local")
+
+@dataclass
+class Context():
+    vectordb_config: dict
+    tmp_dir: str = "/tmp"
 
 supported_tools = {}
 def add_supported_tools(tools: dict[str, Callable[['ToolA'], BaseTool]]):
     global supported_tools
     supported_tools.update(tools)
 
-def init_supported_tools(rel_dir: str):
-    global supported_tools
-    supported_tools = {
-        "builtin:SerperDevTool": SerperDevTool(),
-        "builtin:DirectoryReadTool": DirectoryReadTool(directory=rel_dir),
-        "builtin:FileReadTool": FileReadTool(directory=rel_dir),
-        "builtin:WebsiteSearchTool": WebsiteSearchTool(),
-    }
+# def init_supported_tools(rel_dir: str):
+#     global supported_tools
+#     supported_tools = {
+#         "builtin:SerperDevTool": SerperDevTool(),
+#         "builtin:DirectoryReadTool": DirectoryReadTool(directory=rel_dir),
+#         "builtin:FileReadTool": FileReadTool(directory=rel_dir),
+#         "builtin:WebsiteSearchTool": WebsiteSearchTool(),
+#     }
 
 
 class ToolA(BaseModel):
@@ -44,16 +55,22 @@ class ToolA(BaseModel):
     name: Optional[str] = Field(None, description="name of tool")
     opts: Optional[dict] = Field({}, description="optional options provided to the tool")
 
-    def as_crew_tool(self) -> BaseTool:
+    def as_crew_tool(self, ctxt: Context) -> BaseTool:
         try:
             id = self.id
+            t = None
+            if id.startswith("builtin:"):
+                # legacy support
+                n = id.split(":")[1]
+                id = "urn:sd-core:crewai.builtin." + n[0].lower() + n[1:]
+
             if id.startswith("urn:sd-core:crewai.builtin."):
                 t = supported_tools.get(id)
             elif id.startswith("urn:ivcap:service:"):
                 t = ivcap_tool_test(id, **self.opts)
             if not t:
                 raise ValueError(f"Unsupported tool '{id}'")
-            tool = t(self)
+            tool = t(self, ctxt)
             return tool
         except Exception as err:
             raise err
@@ -65,16 +82,18 @@ class AgentA(BaseModel):
     goal: str = Field(description="goal description for this agent")
     backstory: str = Field(description="the backstroy of this agent")
     llm: str = Field(None, description="name of LLM to use for this agent")
-    max_iter: int = Field(-1, description="max. number of iternations. -1 .. forever?")
+    max_iter: int = Field(15, description="max. number of iternations.")
     verbose: bool = Field(False, description="be verbose")
     memory: bool = Field(False, description="use memory")
     allow_delegation: bool = Field(False, description="allow for delegation to other agents")
     tools: List[ToolA] = Field([], description="list of tools the agent can use")
 
-    def as_crew_agent(self, **kwargs) -> Agent:
+    def as_crew_agent(self, ctxt: Context, **kwargs) -> Agent:
+
         try:
             d = self.model_dump(mode='python')
-            d['tools'] = [t.as_crew_tool() for t in self.tools]
+            d['tools'] = [t.as_crew_tool(ctxt) for t in self.tools]
+            #d['verbose'] = True
             d.update(**kwargs)
             a = Agent(**d)
             return a
@@ -91,7 +110,7 @@ class TaskA(BaseModel):
     async_execution: Optional[bool] = Field(False)
     context: Optional[List[str]] = Field([])
 
-    def as_crew_task(self, agents: list[Agent], **args) -> Task:
+    def as_crew_task(self, agents: list[Agent], ctxt: Context, **kwargs) -> Task:
         d = self.model_dump(mode='python')
         an = d.get('agent', None)
         agent = agents.get(an, None)
@@ -99,12 +118,26 @@ class TaskA(BaseModel):
             d['agent'] = agent
         else:
             raise ValueError(f"unknown agent '{an}'")
-        t = Task(**d, **args)
+        d['tools'] = [t.as_crew_tool(ctxt) for t in self.tools]
+        d.update(**kwargs)
+        t = Task(**d)
         return t
 
 class CrewA(BaseModel):
+    @classmethod
+    def from_aspect(cls, aspect_urn: str) -> 'CrewA':
+        content = load_ivcap_aspect(aspect_urn)
+        content['verbose'] = False # should be set on execution
+        agents = []
+        for name, a in content.get("agents", {}).items():
+            a['name'] = name
+            agents.append(a)
+        content['agents'] = agents
+        crew = cls(**content)
+        return crew
+
     jschema: str = Field("urn:sd:schema.icrew.crew.2", alias="$schema")
-    name: str = Field(description="name of crew")
+    name: Optional[str] = Field(None, description="name of crew")
     placeholders: List[str] = Field(None, description="optional list of placeholders used in goal and backstories")
     tasks: List[TaskA] = Field(description="list of tasks to perform in this crew")
     agents: List[AgentA] = Field(description="list of agents in this crew")
@@ -129,12 +162,11 @@ class CrewA(BaseModel):
         description="Maximum number of requests per minute for the crew execution to be respected.",
     )
 
-
     def as_crew(self, llm: LLM, **kwargs) -> Crew:
-
+        ctxt = Context(vectordb_config=create_vectordb_config())
         agents = {}
-        for a in self.agents: agents[a.name] = a.as_crew_agent(llm=llm)
-        tasks = [t.as_crew_task(agents) for t in self.tasks]
+        for a in self.agents: agents[a.name] = a.as_crew_agent(llm=llm, ctxt=ctxt)
+        tasks = [t.as_crew_task(agents, ctxt=ctxt) for t in self.tasks]
 
         result = {}
         def step_callback(a: Union[AgentFinish, List[Tuple[AgentAction, str]]]):
@@ -178,15 +210,24 @@ class TaskResponse(BaseModel):
             agent=to.agent
         )
 
-class CrewResponse(BaseModel):
-    jschema: str = Field("urn:sd:schema:icrew.answer.2", alias="$schema")
-    answer: str
-    crew_name: str
-    place_holders: List[str] = Field([], description="list of placeholders inserted into crew's template")
-    task_responses: List[TaskResponse]
+def load_ivcap_aspect(urn: str) -> any:
+    # "GET", "path": "/1/aspects?include-content=false&limit=10&schema=urn"
+    base_url = IVCAP_BASE_URL
+    params = {
+        "schema": "urn:sd:schema:icrew-crew.1",
+        "entity": urn,
+        "limit": 1,
+        "include-content": "true",
+    }
+    url = urljoin(base_url, "/1/aspects") + "?" + urlencode(params)
+    try:
+        response = requests.get(url)
+        if response.status_code != 200:
+            raise Exception(f"fetching crew definition '{urn}' - {response}")
 
-
-    created_at: str = Field(description="time this answer was created ISO")
-    process_time_sec: float
-    run_time_sec: float
-    token_usage: UsageMetrics = Field(description="tokens used while executing this crew")
+        items = response.json().get("items", [])
+        if len(items) != 1:
+            raise Exception(f"cannot find crew definition '{urn}'")
+        return items[0].get("content")
+    except requests.exceptions.RequestException as e:
+        print("An error occurred:", e)

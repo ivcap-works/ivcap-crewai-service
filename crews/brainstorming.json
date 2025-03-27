@@ -1,0 +1,10 @@
+{
+  "$schema": "urn:sd-core:schema.crewai.request.1",
+  "name": "quantum_computing_healthcare",
+  "inputs": {
+    "research_topic": "Quantum Computing Applications in Healthcare",
+    "keywords": "drug discovery, medical imaging, optimization",
+    "additional_information": "Quantum computing has shown promise in protein folding simulations."
+  },
+  "crew-ref": "urn:sd:crewai:crew.brainstorming"
+}

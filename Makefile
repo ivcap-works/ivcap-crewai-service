@@ -1,8 +1,9 @@
 SERVICE_NAME=crew-ai-service
 SERVICE_TITLE=Execute a crewAI instruction set
 
-SERVICE_FILE=crew_ai_service.py
-PROVIDER_NAME=sc.experimental
+# SERVICE_FILE=crew_ai_service.py
+# PROVIDER_NAME=sc.experimental
+IVCAP_SERVICE_FILE=service.json
 
 include Makefile.common
 
@@ -14,12 +15,24 @@ SERVICE_URL=http://localhost:8077
 
 run:
 	env VERSION=$(VERSION) \
+		IVCAP_BASE_URL=https://develop.ivcap.net \
 		python ${PROJECT_DIR}/service.py --port ${PORT}
 
-TEST_REQUEST=examples/simple_crew.json
+TEST_REQUEST=crews/simple_crew.json
 test-local:
 	curl \
 		-X POST \
+		-H "Timeout: 600" \
+		-H "content-type: application/json" \
+		--data @${TEST_REQUEST}  \
+		http://localhost:${PORT} | jq
+
+TEST_REQUEST=crews/simple_crew.json
+test-local-with-auth:
+	TOKEN=$(shell ivcap --context gke-dev context get access-token --refresh-token); \
+	curl \
+		-X POST \
+		-H "Authorization: Bearer $$TOKEN" \
 		-H "Timeout: 600" \
 		-H "content-type: application/json" \
 		--data @${TEST_REQUEST}  \
@@ -35,6 +48,24 @@ test-job:
 		-H "Timeout: 60" \
 		--data @${TEST_REQUEST} \
 		${TEST_SERVER}/1/services2/${SERVICE_ID}/jobs
+
+test-job-ivcap:
+	TOKEN=$(shell ivcap context get access-token --refresh-token); \
+	curl -i -X POST \
+	-H "content-type: application/json" \
+	-H "Timeout: 10" \
+	-H "Authorization: Bearer $$TOKEN" \
+	--data @${TEST_REQUEST} \
+	https://develop.ivcap.net/1/services2/${SERVICE_ID}/jobs
+
+JOB_ID=00000000-0000-0000-0000-000000000000
+test-get-result-ivcap:
+	TOKEN=$(shell ivcap context get access-token --refresh-token); \
+	curl \
+	-H "content-type: application/json" \
+	-H "Timeout: 20" \
+	-H "Authorization: Bearer $$TOKEN" \
+	https://develop.ivcap.net/1/services2/${SERVICE_ID}/jobs/${JOB_ID}?with-result-content=true | jq
 
 submit-request:
 	curl -X POST -H "Content-Type: application/json" -d @${PROJECT_DIR}/examples/simple_crew.json ${SERVICE_URL}
@@ -53,7 +84,7 @@ docker-run: #docker-build
 	docker run -it \
 		-p ${PORT}:${PORT} \
 		--platform=linux/${TARGET_ARCH} \
-		--user ${DOCKER_USER} \
+		-e IVCAP_BASE_URL=https://develop.ivcap.net \
 		--rm \
 		${DOCKER_NAME}_${TARGET_ARCH} --port ${PORT}
 
