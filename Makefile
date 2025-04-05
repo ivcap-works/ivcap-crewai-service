@@ -53,10 +53,10 @@ test-job-ivcap:
 	TOKEN=$(shell ivcap context get access-token --refresh-token); \
 	curl -i -X POST \
 	-H "content-type: application/json" \
-	-H "Timeout: 10" \
+	-H "Timeout: 2" \
 	-H "Authorization: Bearer $$TOKEN" \
 	--data @${TEST_REQUEST} \
-	https://develop.ivcap.net/1/services2/${SERVICE_ID}/jobs
+	$(shell ivcap context get url)/1/services2/${SERVICE_ID}/jobs
 
 JOB_ID=00000000-0000-0000-0000-000000000000
 test-get-result-ivcap:
@@ -65,7 +65,7 @@ test-get-result-ivcap:
 	-H "content-type: application/json" \
 	-H "Timeout: 20" \
 	-H "Authorization: Bearer $$TOKEN" \
-	https://develop.ivcap.net/1/services2/${SERVICE_ID}/jobs/${JOB_ID}?with-result-content=true | jq
+	$(shell ivcap context get url)/1/services2/${SERVICE_ID}/jobs/${JOB_ID}?with-result-content=true | jq
 
 submit-request:
 	curl -X POST -H "Content-Type: application/json" -d @${PROJECT_DIR}/examples/simple_crew.json ${SERVICE_URL}

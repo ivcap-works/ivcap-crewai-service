@@ -4,4 +4,4 @@ dataclass_wizard
 pydantic
 datamodel_code_generator
 ivcap-fastapi >= 0.3.0
-ivcap_ai_tool >= 0.5.10
+ivcap_ai_tool >= 0.6.0

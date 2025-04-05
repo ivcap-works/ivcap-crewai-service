@@ -58,7 +58,7 @@ tool-register: #docker-publish
 	@if [[ -z "${tool_id}" ]]; then echo "ERROR: No Tool ID found"; exit -1; fi
 	docker run --rm ${DOCKER_NAME} --print-tool-description  2>/dev/null \
 	| sed 's|#SERVICE_ID#|${service_id}|' \
-	| ivcap aspect update ${service_id} -f - --timeout 600
+	| ivcap aspect update --policy urn:ivcap:policy:ivcap.open.metadata  ${service_id} -f - --timeout 600
 
 docker-publish: TARGET_ARCH=amd64
 docker-publish: docker-build

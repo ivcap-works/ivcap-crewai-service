@@ -25,7 +25,8 @@ RUN mkdir /.local && chmod 777 /.local
 RUN mkdir /.mem0 && chmod 777 /.mem0
 
 # VERSION INFORMATION
-ENV VERSION=0.0.1
+ARG VERSION ???
+ENV VERSION=$VERSION
 
 # ALERT!!! Should NOT copy keys into docker container
 ADD .env .

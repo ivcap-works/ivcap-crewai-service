@@ -1,5 +1,7 @@
 import datetime
 import os
+# Remove when we use our own telemetry
+os.environ["OTEL_SDK_DISABLED"] = "true"
 import sys
 import time
 from typing import Dict, List, Optional
@@ -83,7 +85,6 @@ async def crew_runner(req: CrewRequest) -> CrewResponse:
     """Provides the ability to request a crew of agents to execute
     their plan on a CrewAI runtime."""
 
-    llm = LLM(model="gpt-4o", api_key=os.getenv("OPENAI_API_KEY"))
     if req.crew_ref:
         crewDef = CrewA.from_aspect(req.crew_ref)
     else:
@@ -91,6 +92,7 @@ async def crew_runner(req: CrewRequest) -> CrewResponse:
     if not crewDef:
         raise ValueError("No crew definition provided.")
 
+    llm = LLM(model="gpt-4o", api_key=os.getenv("OPENAI_API_KEY"))
     crew = crewDef.as_crew(llm=llm, memory=False, verbose=False, planning=True)
 
     logger.info(f"processing crew '{req.name}'")
@@ -129,6 +131,8 @@ def service_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
 
     if args.litellm_proxy != None:
         os.setenv("LITELLM_PROXY", args.litellm_proxy)
+
+
     return args
 
 if __name__ == "__main__":
