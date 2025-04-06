@@ -132,6 +132,7 @@ def service_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
     if args.litellm_proxy != None:
         os.setenv("LITELLM_PROXY", args.litellm_proxy)
 
+    logger.info(f"OTEL_SDK_DISABLED={os.getenv('OTEL_SDK_DISABLED')}")
 
     return args
 

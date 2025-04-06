@@ -12,6 +12,7 @@ RUN_DIR = ${PROJECT_DIR}/_run_
 TMP_DIR=/tmp
 PORT=8077
 SERVICE_URL=http://localhost:8077
+TIMEOUT=20
 
 run:
 	env VERSION=$(VERSION) \
@@ -22,7 +23,7 @@ TEST_REQUEST=crews/simple_crew.json
 test-local:
 	curl \
 		-X POST \
-		-H "Timeout: 600" \
+		-H "Timeout: ${TIMEOUT}" \
 		-H "content-type: application/json" \
 		--data @${TEST_REQUEST}  \
 		http://localhost:${PORT} | jq
@@ -33,7 +34,7 @@ test-local-with-auth:
 	curl \
 		-X POST \
 		-H "Authorization: Bearer $$TOKEN" \
-		-H "Timeout: 600" \
+		-H "Timeout: ${TIMEOUT}" \
 		-H "content-type: application/json" \
 		--data @${TEST_REQUEST}  \
 		http://localhost:${PORT} | jq
@@ -45,7 +46,7 @@ test-job:
 		-X POST \
 		-H "Authorization: Bearer $(shell ivcap context get access-token --refresh-token)"  \
 		-H "Content-Type: application/json" \
-		-H "Timeout: 60" \
+		-H "Timeout: ${TIMEOUT}" \
 		--data @${TEST_REQUEST} \
 		${TEST_SERVER}/1/services2/${SERVICE_ID}/jobs
 
@@ -53,7 +54,7 @@ test-job-ivcap:
 	TOKEN=$(shell ivcap context get access-token --refresh-token); \
 	curl -i -X POST \
 	-H "content-type: application/json" \
-	-H "Timeout: 2" \
+	-H "Timeout: ${TIMEOUT}" \
 	-H "Authorization: Bearer $$TOKEN" \
 	--data @${TEST_REQUEST} \
 	$(shell ivcap context get url)/1/services2/${SERVICE_ID}/jobs
@@ -66,6 +67,14 @@ test-get-result-ivcap:
 	-H "Timeout: 20" \
 	-H "Authorization: Bearer $$TOKEN" \
 	$(shell ivcap context get url)/1/services2/${SERVICE_ID}/jobs/${JOB_ID}?with-result-content=true | jq
+
+list-results-ivcap:
+	TOKEN=$(shell ivcap context get access-token --refresh-token); \
+	curl \
+	-H "content-type: application/json" \
+	-H "Timeout: 20" \
+	-H "Authorization: Bearer $$TOKEN" \
+	$(shell ivcap context get url)/1/services2/${SERVICE_ID}/jobs | jq
 
 submit-request:
 	curl -X POST -H "Content-Type: application/json" -d @${PROJECT_DIR}/examples/simple_crew.json ${SERVICE_URL}
