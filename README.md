@@ -33,7 +33,6 @@ ANTHROPIC_API_KEY=your_anthropic_api_key
 GOOGLE_API_KEY=your_google_api_key
 ```
 
-
 ### Initial Test of Service - Processing Queues
 
 Finally, to check if everything is properly installed, use the `run` target to execute the
@@ -41,55 +40,51 @@ service locally:
 
 ```
 % make run
-env IVCAP_OUT_DIR=/.../_run_ \
-        python crew_ai_service.py \
-                --input /.../examples/queue \
-                --output urn:ivcap:queue:/.../_run_/out
-INFO 2024-11-15T17:24:14+1100 ivcap IVCAP Service 'crew-ai-runner' ?/? (sdk 0.8.0) built on ?.
-INFO 2024-11-15T17:24:14+1100 ivcap Starting job for service 'crew-ai-runner' on node 'None' ..
-INFO 2024-11-15T17:24:15+1100 service processing crew 'Simple Test Crew'
-...
-DEBUG 2024-11-15T17:25:24+1100 ivcap Queue#out pushing message id '1'
->>> Output should be in '/.../_run_/out'
-```
-
-At this point you should see a few files in the `./_run_/out` directory:
-
-```
-% ls ./_run_/out
-00000001.json   _idx            _log.csv        _pending        _queue.lock
-```
-
-The `00000001.json` file contains the collected results and progress reports from the
-various agents and tools employed.
-
-### Initial Test of Service - HTTP Service
-
-An alternative deployment is to run the service as an HTTP server waiting for requests:
-
-```
-% make run-http
-env IVCAP_OUT_DIR=/.../_run_ \
-        python crew_ai_service.py \
-                --ivcap:service-url http://localhost:8077
-INFO 2024-11-15T17:31:54+1100 ivcap IVCAP Service 'crew-ai-runner' ?/? (sdk 0.8.0) built on ?.
-INFO 2024-11-15T17:31:54+1100 ivcap Starting job for service 'crew-ai-runner' on node 'None' (urn:ivcap:order:00000000-0000-0000-0000-000000000000)
-INFO:     Started server process [6737]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-INFO:     Uvicorn running on http://localhost:8077 (Press CTRL+C to quit)
+env VERSION="|87f9056|2025-04-06T17:39+10:00" \
+                python ../service.py --port 8077
+.... lots of deprecation warnings from crewAI tools library
+2025-04-06T17:39:29+1000 INFO (app): OTEL_SDK_DISABLED=true
+2025-04-06T17:39:29+1000 INFO (app): CrewAI Agent Runner - |87f9056|2025-04-06T17:39+10:00 - v0.5.9
+/opt/homebrew/Caskroom/miniconda/base/envs/crewai/lib/python3.11/site-packages/websockets/legacy/__init__.py:6: DeprecationWarning: websockets.legacy is deprecated; see https://websockets.readthedocs.io/en/stable/howto/upgrade.html for upgrade instructions
+  warnings.warn(  # deprecated in 14.0 - 2024-11-09
+/opt/homebrew/Caskroom/miniconda/base/envs/crewai/lib/python3.11/site-packages/uvicorn/protocols/websockets/websockets_impl.py:17: DeprecationWarning: websockets.server.WebSocketServerProtocol is deprecated
+  from websockets.server import WebSocketServerProtocol
+2025-04-06T17:39:29+1000 INFO (uvicorn.error): Started server process [7134]
+2025-04-06T17:39:29+1000 INFO (uvicorn.error): Waiting for application startup.
+2025-04-06T17:39:29+1000 INFO (uvicorn.error): Application startup complete.
+2025-04-06T17:39:29+1000 INFO (uvicorn.error): Uvicorn running on http://0.0.0.0:8077 (Press CTRL+C to quit
 ```
 
 The service is now waiting at local port 8077 for requests. The Makefile already defines a
 target to use curl to send such request. In a different terminal, issue the following:
 
+### Testing with Simple Crew
+
 ```
-% make submit-request
-curl -X POST -H "Content-Type: application/json" -d @/.../examples/simple_crew.json http://localhost:8077
+% make test-local
+curl \
+                -X POST \
+                -H "Timeout: 360" \
+                -H "content-type: application/json" \
+                --data @crews/simple_crew.json  \
+                http://localhost:8077 | jq
+... some updatrs from curl while waiting for a result
 {
   "$schema": "urn:sd:schema:icrew.answer.2",
-  "answer": "Artificial Intelligence (AI) has been making significant strides in 2024, ...
-  ...
+  "answer": "---\n\n**Exploring the Future: How AI is Shaping Our World in 2024**\n\nThe digital frontier is ever-evolving, and at the forefront of this transformation is artificial intelligence (AI). In 2024, AI is not just a buzzword but a significant force reshaping industries and enhancing our daily lives. Let's dive into how AI is breaking barriers and setting new benchmarks across various sectors.\n\n**Riding the Wave of the Generative AI Boom**\n\nOne of the most exciting trends in 2024 is the generative AI boom. Businesses worldwide are riding this wave to revolutionize content creation and customer interaction. ...
+  ....
+
+  "created_at": "2025-04-06T17:45:00+10:00",
+  "process_time_sec": 0.6114650000000004,
+  "run_time_sec": 55.399178981781006,
+  "token_usage": {
+    "total_tokens": 32049,
+    "prompt_tokens": 29808,
+    "cached_prompt_tokens": 14848,
+    "completion_tokens": 2241,
+    "successful_requests": 10
+  }
+}
 ```
 
 ## Build & Deployment Service <a name="build-deployment"></a>
@@ -111,22 +106,17 @@ To locally test the docker container:
 ```
 % make docker-run
 ...
+% make docker-run
 docker run -it \
-                -e IVCAP_INSIDE_CONTAINER="" \
-                -e IVCAP_ORDER_ID=ivcap:order:0000 \
-                -e IVCAP_NODE_ID=n0 \
-                -e IVCAP_IN_DIR=/data/in \
-                -e IVCAP_OUT_DIR=/data/out \
-                -e IVCAP_CACHE_DIR=/data/cache \
-                -v /.../examples:/data/in \
-                -v /.../_run_:/data/out \
-                -v /.../_run_:/data/cache \
-                --user "502:20" \
-                crew_ai_service \
-                        --input /data/in/queue \
-                        --output urn:ivcap:queue:/data/out
-INFO 2024-11-15T06:36:45+0000 ivcap IVCAP Service 'crew-ai-runner' / (sdk 0.8.0) built on Fri Nov 15 15:44:38 AEDT 2024.
-2024-11-15 06:36:45,733 - 281473314344992 - utils.py-utils:129 - INFO: IVCAP Service 'crew-ai-runner' / (sdk 0.8.0) built on Fri Nov 15 15:44:38 AEDT 2024.
-INFO 2024-11-15T06:36:45+0000 ivcap Starting job for service 'crew-ai-runner' on node 'None' (ivcap:order:0000)
-2024-11-15 06:36:45,734 - 281473314344992 - service.py-service:203 - INFO: Starting job for service 'crew-ai-runner' on node 'None' (ivcap:order:0000)
-INFO 2024-11-15T06:36:45+0000 service processing crew 'Simple Test Crew'
+                -p 8077:8077 \
+                --platform=linux/arm64 \
+                --rm \
+                crew_ai_service_arm64 --port 8077
+.... lots of deprecation warnings from crewAI tools library
+2025-04-06T07:51:26+0000 INFO (uvicorn.error): Started server process [1]
+2025-04-06T07:51:26+0000 INFO (uvicorn.error): Waiting for application startup.
+2025-04-06T07:51:26+0000 INFO (uvicorn.error): Application startup complete.
+2025-04-06T07:51:26+0000 INFO (uvicorn.error): Uvicorn running on http://0.0.0.0:8077 (Press CTRL+C to quit)
+```
+
+Again, see the `Makefile` for various testing scenarios.

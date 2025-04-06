@@ -1,0 +1,128 @@
+{
+    "$schema": "urn:sd:schema:icrew-crew.1",
+    "id": "urn:sd:crewai:crew.brainstorming",
+    "name": "Brainstorming",
+    "placeholders": [
+        "research_topic",
+        "keywords",
+        "additional_information"
+    ],
+    "agents": {
+        "research_agent": {
+            "role": "Background Research Agent",
+            "goal": "Research {research_topic} to identify key concepts and opportunities related to {keywords}. When provided, incorporate insights from {additional_information}.",
+            "backstory": "You are an expert in research exploration with deep knowledge of scientific methodologies. Your analytical skills help identify key concepts and emerging opportunities in research fields. You excel at integrating existing information with new research to create comprehensive analyses. You excel at integrating existing information with new research to create comprehensive analyses.",
+            "llm": "?llmodel",
+            "max_iter": -1,
+            "verbose": true,
+            "memory": true,
+            "tools": [
+                {
+                    "id": "builtin:SerperDevTool",
+                    "name": "SerperDevTool",
+                    "description": "A tool that can be used to search the internet with a search_query."
+                },
+                {
+                    "id": "builtin:WebsiteSearchTool",
+                    "name": "WebsiteSearchTool",
+                    "description": "A tool that can be used to semantic search a query from a specific URL content."
+                },
+                {
+                    "id": "builtin:RagTool",
+                    "name": "RagTool",
+                    "description": "A tool that can be used to retrieve and analyze relevant documents."
+                }
+            ],
+            "allow_delegation": true
+        },
+        "ideation_agent": {
+            "role": "Ideation Agent",
+            "goal": "Generate innovative research ideas for {research_topic}, incorporating aspects of {keywords}. When available, build upon insights from {additional_information}.",
+            "backstory": "You are a creative research innovator with expertise in generating novel ideas. Your interdisciplinary knowledge helps identify unique research opportunities and innovative approaches. You excel at building upon existing information to create breakthrough concepts. You excel at integrating existing information with new research to create comprehensive analyses.",
+            "llm": "?llmodel",
+            "max_iter": -1,
+            "verbose": true,
+            "memory": true,
+            "tools": [
+                {
+                    "id": "builtin:SerperDevTool",
+                    "name": "SerperDevTool",
+                    "description": "A tool that can be used to search the internet with a search_query."
+                },
+                {
+                    "id": "builtin:WebsiteSearchTool",
+                    "name": "WebsiteSearchTool",
+                    "description": "A tool that can be used to semantic search a query from a specific URL content."
+                },
+                {
+                    "id": "builtin:RagTool",
+                    "name": "RagTool",
+                    "description": "A tool that can be used to retrieve and analyze relevant documents."
+                }
+            ],
+            "allow_delegation": true
+        },
+        "synthesis_agent": {
+            "role": "Research Idea Synthesizer",
+            "goal": "Evaluate and synthesize research ideas for {research_topic}, ensuring alignment with {keywords}. When provided, integrate contextual information from {additional_information}.",
+            "backstory": "You are an expert in research evaluation with experience in assessing project viability. Your analytical approach helps identify promising research directions while considering practical constraints. You excel at synthesizing diverse information sources to create cohesive research strategies. You excel at integrating existing information with new research to create comprehensive analyses.",
+            "llm": "?llmodel",
+            "max_iter": -1,
+            "verbose": true,
+            "memory": true,
+            "tools": [
+                {
+                    "id": "builtin:SerperDevTool",
+                    "name": "SerperDevTool",
+                    "description": "A tool that can be used to search the internet with a search_query."
+                },
+                {
+                    "id": "builtin:WebsiteSearchTool",
+                    "name": "WebsiteSearchTool",
+                    "description": "A tool that can be used to semantic search a query from a specific URL content."
+                },
+                {
+                    "id": "builtin:RagTool",
+                    "name": "RagTool",
+                    "description": "A tool that can be used to retrieve and analyze relevant documents."
+                }
+            ],
+            "allow_delegation": false
+        }
+    },
+    "tasks": [
+        {
+            "description": "Research {research_topic} to identify key concepts and opportunities related to {keywords}. When provided, analyze and incorporate insights from {additional_information}.",
+            "expected_output": "# Background Research for {research_topic}\n\n## Key Concepts\n| Concept | Definition | Relevance to {keywords} | Current Understanding |\n|---------|------------|----------------------|---------------------|\n\n## Research Landscape\n| Area | Current State | Key Players | Future Directions |\n|------|--------------|-------------|------------------|\n\n## Knowledge Gaps\n| Gap | Description | Impact | Research Potential |\n|-----|-------------|--------|-------------------|\n\n## Research Questions\n| Question | Rationale | Required Methods | Expected Impact |\n|----------|-----------|------------------|----------------|\n\n## Insights from Additional Information\n| Source Insight | Relevance | How It Extends Current Knowledge | Research Implications |\n|---------------|-----------|----------------------------------|----------------------|\n\n\n\n## Insights from Additional Information\n| Source Insight | Relevance | How It Extends Current Knowledge | Research Implications |\n|---------------|-----------|----------------------------------|----------------------|\nValidation Rules:\n- Concepts must have clear links to keywords with citations\n- Landscape must identify top 5 leaders with recent work\n- Gaps must show quantifiable research potential\n- Questions must have testable hypotheses and methods\n- When additional information is provided, insights must be clearly connected to the research topic\n- When additional information is provided, insights must be clearly connected to the research topic",
+            "tools": [],
+            "agent": "research_agent",
+            "async_execution": false,
+            "name": "Background Research Task",
+            "context": []
+        },
+        {
+            "description": "Generate innovative research ideas for {research_topic}, incorporating aspects of {keywords}. When available, leverage insights from {additional_information} to enhance idea generation.",
+            "expected_output": "# Research Ideas for {research_topic}\n\n## Novel Approaches\n| Approach | Innovation | Methodology | Potential Impact |\n|----------|------------|-------------|------------------|\n\n## Project Concepts\n| Concept | Description | Requirements | Expected Outcomes |\n|---------|-------------|--------------|------------------|\n\n## Applications\n| Application | Target Area | Implementation | Value Proposition |\n|-------------|-------------|----------------|------------------|\n\n## Cross-field Connections\n| Field | Synergy | Joint Opportunities | Resource Needs |\n|-------|---------|-------------------|----------------|\n\n## Ideas Inspired by Additional Information\n| Inspiration | Derived Concept | Novel Element | Development Path |\n|------------|-----------------|---------------|------------------|\n\n\n\n## Insights from Additional Information\n| Source Insight | Relevance | How It Extends Current Knowledge | Research Implications |\n|---------------|-----------|----------------------------------|----------------------|\nValidation Rules:\n- Approaches must demonstrate novelty with literature review\n- Concepts must include success criteria and metrics\n- Applications must have market analysis and ROI\n- Connections must show quantifiable synergy benefits\n- When additional information is provided, inspired ideas must show clear evolution from source material\n- When additional information is provided, insights must be clearly connected to the research topic",
+            "tools": [],
+            "agent": "ideation_agent",
+            "async_execution": false,
+            "name": "Ideation Task",
+            "context": [
+                "Background Research Task"
+            ]
+        },
+        {
+            "description": "Synthesize and evaluate research ideas for {research_topic}, ensuring alignment with {keywords}. When provided, consider contextual factors from {additional_information} in your evaluation.",
+            "expected_output": "# Research Synthesis for {research_topic}\n\n## Idea Assessment\n| Idea | Feasibility (1-10) | Impact (1-10) | Resource Needs | Timeline | Priority Score |\n|------|-------------------|---------------|----------------|----------|----------------|\n\n## Technical Analysis\n| Aspect | Requirements | Available Resources | Gap Analysis |\n|--------|--------------|-------------------|---------------|\n\n## Risk Assessment\n| Risk | Probability (%) | Impact (1-10) | Mitigation Strategy |\n|------|----------------|---------------|--------------------|\n\n## Implementation Plan\n| Priority | Idea | Rationale | Next Steps | Success Metrics |\n|----------|------|-----------|------------|------------------|\n\n## Integration of Additional Context\n| Contextual Factor | Influence on Research Direction | Adaptation Required | Strategic Advantage |\n|-------------------|--------------------------------|---------------------|--------------------|\n\n\n\n## Insights from Additional Information\n| Source Insight | Relevance | How It Extends Current Knowledge | Research Implications |\n|---------------|-----------|----------------------------------|----------------------|\nValidation Rules:\n- Assessment must use 1-10 scoring with justification\n- Analysis must include resource cost estimates\n- Risks must have quantified probability and impact\n- Plan must have SMART success criteria\n- When additional information is provided, integration must show how context enhances or modifies research strategy\n- When additional information is provided, insights must be clearly connected to the research topic",
+            "tools": [],
+            "agent": "synthesis_agent",
+            "async_execution": false,
+            "name": "Synthesis Task",
+            "context": [
+                "Ideation Task"
+            ]
+        }
+    ],
+    "verbose": 2,
+    "process": "sequential"
+}

@@ -1,6 +1,6 @@
 {
-  "$schema": "urn:sd:schema:icrew.crew.2",
-  "id": "urn:sd:crewai:simple",
+  "$schema": "urn:sd:schema:icrew-crew.1",
+  "id": "urn:sd:crewai:crew.simple",
   "name": "Simple Test Crew",
   "placeholders": [],
   "agents": [
@@ -11,12 +11,13 @@
       "backstory": "You work at a leading tech think tank. Your expertise lies in identifying emerging trends. You have a knack for dissecting complex data and presenting actionable insights",
       "tools": [
         {
-          "id": "urn:ivcap:service:ai-tool.ddg-search",
+          "id": "builtin:WebsiteSearchTool",
           "opts": {
             "safesearch": "off"
           }
         }
       ],
+      "memory": true,
       "allow_delegation": false
     },
     {
@@ -24,21 +25,29 @@
       "role": "Tech Content Strategist",
       "goal": "Craft compelling content on tech advancements",
       "backstory": "You are a renowned Content Strategist, known for your insightful and engaging articles. You transform complex concepts into compelling narratives.",
+      "tools": [],
+      "memory": true,
       "allow_delegation": true
     }
   ],
   "tasks": [
     {
       "description": "Conduct a comprehensive analysis of the latest advancements in AI in 2024. Identify key trends, breakthrough technologies, and potential industry impacts.",
-      "expected_output": "Full analysis report in bullet points.",
-      "agent": "researcher"
+      "expected_output": "# AI Advancements Analysis 2024\n\n## Key Trends\n- Trend 1\n- Trend 2\n\n## Breakthrough Technologies\n- Technology 1\n- Technology 2\n\n## Industry Impacts\n- Impact 1\n- Impact 2",
+      "agent": "researcher",
+      "context": "initial_knowledge_base",
+      "async_execution": false,
+      "tools": []
     },
     {
       "description": "Using the insights provided, develop an engaging blog post that highlights the most significant AI advancements. Your post should be informative yet accessible, catering to a tech-savvy audience. Make it sound cool, avoid complex words so it doesn't sound like AI.",
-      "expected_output": "Full blog post of at least 4 paragraphs",
-      "agent": "writer"
+      "expected_output": "# The Cutting Edge: AI in 2024\n\n[Four or more engaging paragraphs about AI advancements, written in an accessible style for tech-savvy readers.]",
+      "agent": "writer",
+      "context": "researcher",
+      "async_execution": false,
+      "tools": []
     }
   ],
-  "verbose": true,
+  "verbose": 1,
   "process": "sequential"
 }

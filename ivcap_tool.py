@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 import json
 import re
 from pprint import pprint
@@ -27,14 +27,14 @@ def ivcap_tool(name: str, **kwargs: Any) -> Tool:
     # pprint(service)
     return service
 
-def ivcap_tool_test(name: str, **kwargs: Any) -> Tool:
+def ivcap_tool_test(name: str, **kwargs: Any) -> Callable[[], Tool]:
     import json
 
     with open(f"{name}.json", 'r') as f:
         data = json.load(f)
     url = "http://localhost:8000"
     service = IvcapService.from_service_info(data, url, name, kwargs)
-    return service
+    return lambda: service
 
 class IvcapService(BaseTool):
     name: str
