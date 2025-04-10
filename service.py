@@ -22,6 +22,7 @@ from dotenv import load_dotenv
 
 from ivcap_ai_tool.builder import ToolOptions, add_tool_api_route
 from ivcap_ai_tool.server import start_tool_server
+from ivcap_ai_tool.executor import JobContext
 
 from ivcap_fastapi import getLogger, logging_init
 from service_types import CrewA, TaskResponse, add_supported_tools
@@ -81,7 +82,7 @@ add_supported_tools({
     "urn:sd-core:crewai.builtin.websiteSearchTool": lambda _, ctxt: WebsiteSearchTool(config=ctxt.vectordb_config),
 })
 
-async def crew_runner(req: CrewRequest) -> CrewResponse:
+async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
     """Provides the ability to request a crew of agents to execute
     their plan on a CrewAI runtime."""
 
@@ -95,7 +96,7 @@ async def crew_runner(req: CrewRequest) -> CrewResponse:
     llm = LLM(model="gpt-4o", api_key=os.getenv("OPENAI_API_KEY"))
     crew = crewDef.as_crew(llm=llm, memory=False, verbose=False, planning=True)
 
-    logger.info(f"processing crew '{req.name}'")
+    logger.info(f"processing crew '{req.name}' for '{jobCtxt.job_id}'")
     try:
         # (crew, ctxt, template) = crew_from_file(crew_fd, inputs, log_fd)
         start_time = (time.process_time(), time.time())
@@ -104,7 +105,7 @@ async def crew_runner(req: CrewRequest) -> CrewResponse:
         #     answer = crew.kickoff(inputs)
         end_time = (time.process_time(), time.time())
     except Exception as e:
-        logger.error(f"Error: {e}")
+        logger.error(f"Error({context.job_id}): {e}")
         raise e
 
     resp = CrewResponse(

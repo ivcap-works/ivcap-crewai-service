@@ -10,7 +10,7 @@ RUN apt-get update && \
 WORKDIR /app
 RUN pip install -U pip
 COPY requirements.txt ./
-RUN pip install -r requirements.txt
+RUN pip install --trusted-host pypi.python.org --trusted-host files.pythonhosted.org -r requirements.txt
 
 # COPY requirements-dev.txt ./
 # RUN pip install -r requirements-dev.txt --force-reinstall
