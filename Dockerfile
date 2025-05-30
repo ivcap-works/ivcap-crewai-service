@@ -7,10 +7,13 @@ RUN apt-get update && \
   apt-get clean && \
   rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
 RUN pip install -U pip
-COPY requirements.txt ./
-RUN pip install --trusted-host pypi.python.org --trusted-host files.pythonhosted.org -r requirements.txt
+RUN pip install poetry
+
+WORKDIR /app
+
+COPY pyproject.toml poetry.lock ./
+RUN poetry config virtualenvs.create false && poetry install --no-root
 
 # COPY requirements-dev.txt ./
 # RUN pip install -r requirements-dev.txt --force-reinstall

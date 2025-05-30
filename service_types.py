@@ -20,12 +20,16 @@ from crewai.tasks import TaskOutput
 from langchain_core.tools.base import BaseTool
 
 from dotenv import load_dotenv
-from crewai_tools import SerperDevTool, DirectoryReadTool, FileReadTool, WebsiteSearchTool
+#from crewai_tools import SerperDevTool, DirectoryReadTool, FileReadTool, WebsiteSearchTool
+from crewai_tools import WebsiteSearchTool
 from crewai.types.usage_metrics import UsageMetrics
-from langchain_core.agents import AgentAction, AgentFinish
+#from langchain_core.agents import AgentAction, AgentFinish
 
 from ivcap_tool import ivcap_tool_test
 from vectordb import create_vectordb_config
+
+from events import EventListener
+EventListener()
 
 IVCAP_BASE_URL = os.environ.get("IVCAP_BASE_URL", "http://ivcap.local")
 
@@ -36,17 +40,18 @@ class Context():
 
 supported_tools = {}
 def add_supported_tools(tools: dict[str, Callable[['ToolA'], BaseTool]]):
+# def add_supported_tools(tools: dict[str, Callable[['ToolA'], Any]]):
     global supported_tools
     supported_tools.update(tools)
 
-# def init_supported_tools(rel_dir: str):
-#     global supported_tools
-#     supported_tools = {
-#         "builtin:SerperDevTool": SerperDevTool(),
-#         "builtin:DirectoryReadTool": DirectoryReadTool(directory=rel_dir),
-#         "builtin:FileReadTool": FileReadTool(directory=rel_dir),
-#         "builtin:WebsiteSearchTool": WebsiteSearchTool(),
-#     }
+def init_supported_tools(rel_dir: str):
+    global supported_tools
+    supported_tools = {
+        # "builtin:SerperDevTool": SerperDevTool(),
+        # "builtin:DirectoryReadTool": DirectoryReadTool(directory=rel_dir),
+        # "builtin:FileReadTool": FileReadTool(directory=rel_dir),
+        "builtin:WebsiteSearchTool": WebsiteSearchTool(),
+    }
 
 
 class ToolA(BaseModel):
@@ -168,15 +173,15 @@ class CrewA(BaseModel):
         for a in self.agents: agents[a.name] = a.as_crew_agent(llm=llm, ctxt=ctxt)
         tasks = [t.as_crew_task(agents, ctxt=ctxt) for t in self.tasks]
 
-        result = {}
-        def step_callback(a: Union[AgentFinish, List[Tuple[AgentAction, str]]]):
-            if isinstance(a, list):
-                for (aa, s) in a:
-                    if isinstance(aa, AgentAction):
-                        result.append(aa.dict())
-                        return
-            if isinstance(a, AgentFinish):
-                result.append(a.dict())
+        # result = {}
+        # def step_callback(a: Union[AgentFinish, List[Tuple[AgentAction, str]]]):
+        #     if isinstance(a, list):
+        #         for (aa, s) in a:
+        #             if isinstance(aa, AgentAction):
+        #                 result.append(aa.dict())
+        #                 return
+        #     if isinstance(a, AgentFinish):
+        #         result.append(a.dict())
 
         d = self.model_dump(mode='python')
         d.update({
@@ -184,7 +189,7 @@ class CrewA(BaseModel):
             "tasks": tasks,
             "verbose": True,  # 2, # You can set it to 1 or 2 to different logging levels
             # output_log_file=False,
-            "step_callback": step_callback,
+            # "step_callback": step_callback,
             # max_consecutive_auto_reply=3,
             "allow_parallel": True,
             # temperature=0.7,

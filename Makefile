@@ -1,13 +1,4 @@
 SERVICE_NAME=crew-ai-service
-SERVICE_TITLE=Execute a crewAI instruction set
-
-# SERVICE_FILE=crew_ai_service.py
-# PROVIDER_NAME=sc.experimental
-IVCAP_SERVICE_FILE=service.json
-
-include Makefile.common
-
-RUN_DIR = ${PROJECT_DIR}/_run_
 
 TMP_DIR=/tmp
 PORT=8077
@@ -15,8 +6,7 @@ SERVICE_URL=http://localhost:8077
 TIMEOUT=360
 
 run:
-	env VERSION=$(VERSION) \
-		python ${PROJECT_DIR}/service.py --port ${PORT}
+	poetry ivcap run -- --port ${PORT}
 
 TEST_REQUEST=crews/simple_crew.json
 test-local:
@@ -29,7 +19,7 @@ test-local:
 
 TEST_REQUEST=crews/simple_crew.json
 test-local-with-auth:
-	TOKEN=$(shell ivcap --context gke-dev context get access-token --refresh-token); \
+	TOKEN=$(shell ivcap context get access-token --refresh-token); \
 	curl \
 		-X POST \
 		-H "Authorization: Bearer $$TOKEN" \
@@ -39,7 +29,7 @@ test-local-with-auth:
 		http://localhost:${PORT} | jq
 
 TEST_SERVER=http://ivcap.minikube
-
+SERVICE_ID=$(shell poetry ivcap --silent get-service-id)
 test-job:
 	curl  -i  \
 		-X POST \

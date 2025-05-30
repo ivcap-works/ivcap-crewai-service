@@ -2,44 +2,33 @@ import datetime
 import os
 # Remove when we use our own telemetry
 os.environ["OTEL_SDK_DISABLED"] = "true"
-import sys
 import time
 from typing import Dict, List, Optional
-
-from pydantic import BaseModel, ConfigDict, Field
-
-# Only used for debugging on Max's machine - should not have any negative impact if directories can't be found
-this_dir = os.path.dirname(__file__)
-src_dir = os.path.abspath(os.path.join(this_dir, "../../ivcap-sdk-python/ivcap-ai-tool/src"))
-sys.path.insert(0, src_dir)
-
-from fastapi import FastAPI
-from crewai import LLM
-from crewai_tools import SerperDevTool, WebsiteSearchTool, DirectoryReadTool, FileReadTool
-from crewai.types.usage_metrics import UsageMetrics
 import argparse
 from dotenv import load_dotenv
+from pydantic import BaseModel, ConfigDict, Field
+from crewai import LLM
+from crewai.types.usage_metrics import UsageMetrics
+from crewai_tools import WebsiteSearchTool
+from ivcap_service import getLogger, Service, JobContext
+from ivcap_ai_tool import start_tool_server, ToolOptions, ivcap_ai_tool, logging_init
 
-from ivcap_ai_tool.builder import ToolOptions, add_tool_api_route
-from ivcap_ai_tool.server import start_tool_server
-from ivcap_ai_tool.executor import JobContext
-
-from ivcap_fastapi import getLogger, logging_init
 from service_types import CrewA, TaskResponse, add_supported_tools
-
-logging_init()
-logger = getLogger("app")
 
 # Load environment variables from the .env file
 load_dotenv()
 
+logging_init()
 logger = getLogger("app")
 
-title = "CrewAI Agent Runner"
-summary = "Executes queries or chats with the CrewAI agent framework."
-description = """
->>> A lot more usefule information here.
-"""
+service = Service(
+    name="CrewAI Agent Runner",
+    version=os.environ.get("VERSION", "???"),
+    contact={
+        "name": "Mary Doe",
+        "email": "mary.doe@acme.au",
+    },
+)
 
 class CrewRequest(BaseModel):
     jschema: str = Field("urn:sd-core:schema.crewai.request.1", alias="$schema")
@@ -63,25 +52,15 @@ class CrewResponse(BaseModel):
     run_time_sec: float
     token_usage: UsageMetrics = Field(description="tokens used while executing this crew")
 
-app = FastAPI(
-    title=title,
-    description=description,
-    summary=summary,
-    version=os.environ.get("VERSION", "???"),
-    contact={
-        "name": "Max Ott",
-        "email": "max.ott@data61.csiro.au",
-    },
-    docs_url="/docs", # ONLY set when there is no default GET
-)
 
 add_supported_tools({
-    "urn:sd-core:crewai.builtin.serperDevTool": lambda _, ctxt: SerperDevTool(config=ctxt.vectordb_config),
-    "urn:sd-core:crewai.builtin.directoryReadTool": lambda _, ctxt: DirectoryReadTool(directory=ctxt.tmp_dir),
-    "urn:sd-core:crewai.builtin.fileReadTool": lambda _, ctxt: FileReadTool(directory=ctxt.tmp_dir),
+    # "urn:sd-core:crewai.builtin.serperDevTool": lambda _, ctxt: SerperDevTool(config=ctxt.vectordb_config),
+    # "urn:sd-core:crewai.builtin.directoryReadTool": lambda _, ctxt: DirectoryReadTool(directory=ctxt.tmp_dir),
+    # "urn:sd-core:crewai.builtin.fileReadTool": lambda _, ctxt: FileReadTool(directory=ctxt.tmp_dir),
     "urn:sd-core:crewai.builtin.websiteSearchTool": lambda _, ctxt: WebsiteSearchTool(config=ctxt.vectordb_config),
 })
 
+@ivcap_ai_tool("/", opts=ToolOptions(tags=["CrewAI Runner"]))
 async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
     """Provides the ability to request a crew of agents to execute
     their plan on a CrewAI runtime."""
@@ -97,16 +76,12 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
     crew = crewDef.as_crew(llm=llm, memory=False, verbose=False, planning=True)
 
     logger.info(f"processing crew '{req.name}' for '{jobCtxt.job_id}'")
-    try:
-        # (crew, ctxt, template) = crew_from_file(crew_fd, inputs, log_fd)
-        start_time = (time.process_time(), time.time())
-        cres = crew.kickoff(req.inputs)
-        # with redirect_stdout(log_fd):
-        #     answer = crew.kickoff(inputs)
-        end_time = (time.process_time(), time.time())
-    except Exception as e:
-        logger.error(f"Error({context.job_id}): {e}")
-        raise e
+    # (crew, ctxt, template) = crew_from_file(crew_fd, inputs, log_fd)
+    start_time = (time.process_time(), time.time())
+    cres = crew.kickoff(req.inputs)
+    # with redirect_stdout(log_fd):
+    #     answer = crew.kickoff(inputs)
+    end_time = (time.process_time(), time.time())
 
     resp = CrewResponse(
         answer=cres.raw,
@@ -122,8 +97,6 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
     )
     return resp
 
-add_tool_api_route(app, "/", crew_runner, opts=ToolOptions(tags=["ReAct Agent"], service_id="/"))
-
 def service_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
     parser.add_argument('--litellm-proxy', type=str, help='Address of the the LiteLlmProxy')
     #parser.add_argument('--tmp-dir', type=str, help=f"The 'scratch' directory to use for temporary files [{tmp_dir_prefix}]")
@@ -138,4 +111,4 @@ def service_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
     return args
 
 if __name__ == "__main__":
-    start_tool_server(app, crew_runner, custom_args=service_args)
+    start_tool_server(service)
