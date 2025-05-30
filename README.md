@@ -165,7 +165,7 @@ poetry ivcap tool-register
 ### Step 6: Testing the service on IVCAP <a name="step9"></a>
 
 To test the service we have deployed in the previous step we can follow the same sequence as in
-[Step 7: Run and test locally](#step7). We can use the same test request `two_bp.json`.
+[Run and test locally](#step7). We can use the same test request `two_bp.json`.
 
 ```bash
 TOKEN=$(ivcap context get access-token --refresh-token); \
