@@ -20,10 +20,10 @@ Follow the steps below to build, test, and deploy this service:
 
 - [Step 1: Install Poetry and IVCAP plugin](#step1)
 - [Step 2: Install `ivcap` CLI Tool](#step2)
-- [Step 3: Add and install Dependencies](#step4)
-- [Step 4: Run and test locally](#step7)
-- [Step 5: Deploying to IVCAP](#step8)
-- [Step 6: Testing the service on IVCAP](#step9)
+- [Step 3: Add and install Dependencies](#step3)
+- [Step 4: Run and test locally](#step4)
+- [Step 5: Deploying to IVCAP](#step5)
+- [Step 6: Testing the service on IVCAP](#step6)
 
 ### Step 1: Install Poetry and IVCAP plugin <a name="step1"></a>
 
@@ -85,7 +85,7 @@ ivcap --help
 
 ---
 
-### Step 3: Install Dependencies <a name="step4"></a>
+### Step 3: Install Dependencies <a name="step3"></a>
 
 To install the packages, run:
 
@@ -95,7 +95,9 @@ poetry install --no-root
 
 ---
 
-### Step 4: Run and test locally <a name="step7"></a>
+### Step 4: Run and test locally <a name="step4"></a>
+
+Ensure you have an OPENAI_API_KEY set in your environment, or in a .env file.
 
 In one terminal window, start the service:
 
@@ -111,7 +113,7 @@ make test-local
 
 ---
 
-### Step 5: Deploying to IVCAP <a name="step8"></a>
+### Step 5: Deploying to IVCAP <a name="step5"></a>
 
 To deploy a service or tool to IVCAP, we need to do the following:
 
@@ -162,7 +164,7 @@ poetry ivcap tool-register
 ```
 ---
 
-### Step 6: Testing the service on IVCAP <a name="step9"></a>
+### Step 6: Testing the service on IVCAP <a name="step6"></a>
 
 To test the service we have deployed in the previous step we can follow the same sequence as in
 [Run and test locally](#step7). We can use the same test request `two_bp.json`.
