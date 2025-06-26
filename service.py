@@ -13,13 +13,17 @@ from crewai_tools import WebsiteSearchTool
 from ivcap_service import getLogger, Service, JobContext
 from ivcap_ai_tool import start_tool_server, ToolOptions, ivcap_ai_tool, logging_init
 
-from service_types import CrewA, TaskResponse, add_supported_tools
+from service_types import BuiltinWrapper, CrewA, TaskResponse, add_supported_tools
 
 # Load environment variables from the .env file
 load_dotenv()
 
-logging_init()
+logging_init("./logging.json")
 logger = getLogger("app")
+
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings("ignore", category=PendingDeprecationWarning)
 
 service = Service(
     name="CrewAI Agent Runner",
@@ -57,7 +61,7 @@ add_supported_tools({
     # "urn:sd-core:crewai.builtin.serperDevTool": lambda _, ctxt: SerperDevTool(config=ctxt.vectordb_config),
     # "urn:sd-core:crewai.builtin.directoryReadTool": lambda _, ctxt: DirectoryReadTool(directory=ctxt.tmp_dir),
     # "urn:sd-core:crewai.builtin.fileReadTool": lambda _, ctxt: FileReadTool(directory=ctxt.tmp_dir),
-    "urn:sd-core:crewai.builtin.websiteSearchTool": lambda _, ctxt: WebsiteSearchTool(config=ctxt.vectordb_config),
+    "urn:sd-core:crewai.builtin.websiteSearchTool": lambda _, ctxt: BuiltinWrapper(WebsiteSearchTool(config=ctxt.vectordb_config)),
 })
 
 @ivcap_ai_tool("/", opts=ToolOptions(tags=["CrewAI Runner"]))

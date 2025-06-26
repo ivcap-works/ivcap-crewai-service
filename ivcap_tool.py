@@ -6,7 +6,7 @@ import re
 from pprint import pprint
 import random
 
-from pydantic.v1 import BaseModel
+from pydantic import BaseModel
 from langchain_core.tools.simple import Tool
 from langchain_core.callbacks import CallbackManagerForToolRun
 from langchain_core.tools.base import BaseTool
@@ -116,7 +116,7 @@ def schema_to_model(
     parser = JsonSchemaParser(
         json.dumps(schema),
         custom_class_name_generator=name_generator,
-        base_class="pydantic.v1.BaseModel",
+        base_class="pydantic.BaseModel",
         data_model_type=dmt.data_model,
         data_model_root_type=dmt.root_model,
         data_model_field_type=dmt.field_model,
@@ -124,7 +124,7 @@ def schema_to_model(
         dump_resolve_reference_action=dmt.dump_resolve_reference_action,
     )
     result = parser.parse()
-    result = result.replace("from pydantic import", "from pydantic.v1 import")
+    # No import replacement needed for pydantic v2
     if print_source: print(result)
     exec(result, globals())
     return globals()[rootClass]
