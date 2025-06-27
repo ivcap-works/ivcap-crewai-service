@@ -7,9 +7,16 @@ from typing import Dict, List, Optional
 import argparse
 from dotenv import load_dotenv
 from pydantic import BaseModel, ConfigDict, Field
+
+# According to https://docs.crewai.com/en/telemetry#telemetry this will disable crewAI's telemetry.
+# But this appears not to work, either in crewai 0.121.1 or 0.134.0.
+# We still see requests going out to posthog.com.
+# Perhaps some other library also uses posthog?
+os.environ["CREWAI_DISABLE_TELEMETRY"] = "true"
 from crewai import LLM
 from crewai.types.usage_metrics import UsageMetrics
 from crewai_tools import WebsiteSearchTool
+
 from ivcap_service import getLogger, Service, JobContext
 from ivcap_ai_tool import start_tool_server, ToolOptions, ivcap_ai_tool, logging_init
 

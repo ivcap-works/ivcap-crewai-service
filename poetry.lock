@@ -840,7 +840,7 @@ description = "Cross-platform colored terminal text."
 optional = false
 python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,>=2.7"
 groups = ["main"]
-markers = "os_name == \"nt\" or platform_system == \"Windows\" or sys_platform == \"win32\""
+markers = "platform_system == \"Windows\" or os_name == \"nt\" or sys_platform == \"win32\""
 files = [
     {file = "colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6"},
     {file = "colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44"},
@@ -866,14 +866,14 @@ cron = ["capturer (>=2.4)"]
 
 [[package]]
 name = "crewai"
-version = "0.121.1"
+version = "0.134.0"
 description = "Cutting-edge framework for orchestrating role-playing, autonomous AI agents. By fostering collaborative intelligence, CrewAI empowers agents to work together seamlessly, tackling complex tasks."
 optional = false
-python-versions = "<3.13,>=3.10"
+python-versions = "<3.14,>=3.10"
 groups = ["main"]
 files = [
-    {file = "crewai-0.121.1-py3-none-any.whl", hash = "sha256:8540e97ce53426d833d4b4e32c375cf8115a8a71f0bfa9aac2e940fa92f73b7c"},
-    {file = "crewai-0.121.1.tar.gz", hash = "sha256:f56020e12e8bb88cc789c2ce819b43a04fb22347a766144d8810035a0be016c5"},
+    {file = "crewai-0.134.0-py3-none-any.whl", hash = "sha256:89f102e1ce3e817bdd1ad829bca279b00247fd09e9e0ce0e26e61f267fd8d7d2"},
+    {file = "crewai-0.134.0.tar.gz", hash = "sha256:52cf3dd975a25050838b2270615f5eb91ed72aa032623a35e9e4daa75fb39c4d"},
 ]
 
 [package.dependencies]
@@ -886,7 +886,8 @@ instructor = ">=1.3.3"
 json-repair = ">=0.25.2"
 json5 = ">=0.10.0"
 jsonref = ">=1.1.0"
-litellm = "1.68.0"
+litellm = "1.72.0"
+onnxruntime = "1.22.0"
 openai = ">=1.13.3"
 openpyxl = ">=3.1.5"
 opentelemetry-api = ">=1.30.0"
@@ -897,6 +898,7 @@ pydantic = ">=2.4.2"
 python-dotenv = ">=1.0.0"
 pyvis = ">=0.3.2"
 regex = ">=2024.9.11"
+tokenizers = ">=0.20.3"
 tomli = ">=2.0.2"
 tomli-w = ">=1.1.0"
 uv = ">=0.4.25"
@@ -905,13 +907,12 @@ uv = ">=0.4.25"
 agentops = ["agentops (>=0.3.0)"]
 aisuite = ["aisuite (>=0.1.10)"]
 docling = ["docling (>=2.12.0)"]
-embeddings = ["tiktoken (>=0.7.0,<0.8.0)"]
-fastembed = ["fastembed (>=0.4.1)"]
+embeddings = ["tiktoken (>=0.8.0,<0.9.0)"]
 mem0 = ["mem0ai (>=0.1.94)"]
 openpyxl = ["openpyxl (>=3.1.5)"]
 pandas = ["pandas (>=2.2.3)"]
 pdfplumber = ["pdfplumber (>=0.11.4)"]
-tools = ["crewai-tools (>=0.45.0,<0.46.0)"]
+tools = ["crewai-tools (>=0.48.0,<0.49.0)"]
 
 [[package]]
 name = "crewai-tools"
@@ -2805,14 +2806,14 @@ pytest = ["pytest (>=7.0.0)", "rich (>=13.9.4,<14.0.0)"]
 
 [[package]]
 name = "litellm"
-version = "1.68.0"
+version = "1.72.0"
 description = "Library to easily interface with LLM API providers"
 optional = false
 python-versions = "!=2.7.*,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,!=3.7.*,>=3.8"
 groups = ["main"]
 files = [
-    {file = "litellm-1.68.0-py3-none-any.whl", hash = "sha256:3bca38848b1a5236b11aa6b70afa4393b60880198c939e582273f51a542d4759"},
-    {file = "litellm-1.68.0.tar.gz", hash = "sha256:9fb24643db84dfda339b64bafca505a2eef857477afbc6e98fb56512c24dbbfa"},
+    {file = "litellm-1.72.0-py3-none-any.whl", hash = "sha256:88360a7ae9aa9c96278ae1bb0a459226f909e711c5d350781296d0640386a824"},
+    {file = "litellm-1.72.0.tar.gz", hash = "sha256:135022b9b8798f712ffa84e71ac419aa4310f1d0a70f79dd2007f7ef3a381e43"},
 ]
 
 [package.dependencies]
@@ -2822,7 +2823,7 @@ httpx = ">=0.23.0"
 importlib-metadata = ">=6.8.0"
 jinja2 = ">=3.1.2,<4.0.0"
 jsonschema = ">=4.22.0,<5.0.0"
-openai = ">=1.68.2,<1.76.0"
+openai = ">=1.68.2"
 pydantic = ">=2.0.0,<3.0.0"
 python-dotenv = ">=0.2.0"
 tiktoken = ">=0.7.0"
@@ -2830,7 +2831,8 @@ tokenizers = "*"
 
 [package.extras]
 extra-proxy = ["azure-identity (>=1.15.0,<2.0.0)", "azure-keyvault-secrets (>=4.8.0,<5.0.0)", "google-cloud-kms (>=2.21.3,<3.0.0)", "prisma (==0.11.0)", "redisvl (>=0.4.1,<0.5.0) ; python_version >= \"3.9\" and python_version < \"3.14\"", "resend (>=0.8.0,<0.9.0)"]
-proxy = ["PyJWT (>=2.8.0,<3.0.0)", "apscheduler (>=3.10.4,<4.0.0)", "backoff", "boto3 (==1.34.34)", "cryptography (>=43.0.1,<44.0.0)", "fastapi (>=0.115.5,<0.116.0)", "fastapi-sso (>=0.16.0,<0.17.0)", "gunicorn (>=23.0.0,<24.0.0)", "litellm-proxy-extras (==0.1.15)", "mcp (==1.5.0) ; python_version >= \"3.10\"", "orjson (>=3.9.7,<4.0.0)", "pynacl (>=1.5.0,<2.0.0)", "python-multipart (>=0.0.18,<0.0.19)", "pyyaml (>=6.0.1,<7.0.0)", "rq", "uvicorn (>=0.29.0,<0.30.0)", "uvloop (>=0.21.0,<0.22.0) ; sys_platform != \"win32\"", "websockets (>=13.1.0,<14.0.0)"]
+proxy = ["PyJWT (>=2.8.0,<3.0.0)", "apscheduler (>=3.10.4,<4.0.0)", "backoff", "boto3 (==1.34.34)", "cryptography (>=43.0.1,<44.0.0)", "fastapi (>=0.115.5,<0.116.0)", "fastapi-sso (>=0.16.0,<0.17.0)", "gunicorn (>=23.0.0,<24.0.0)", "litellm-enterprise (==0.1.7)", "litellm-proxy-extras (==0.2.2)", "mcp (==1.5.0) ; python_version >= \"3.10\"", "orjson (>=3.9.7,<4.0.0)", "pynacl (>=1.5.0,<2.0.0)", "python-multipart (>=0.0.18,<0.0.19)", "pyyaml (>=6.0.1,<7.0.0)", "rich (==13.7.1)", "rq", "uvicorn (>=0.29.0,<0.30.0)", "uvloop (>=0.21.0,<0.22.0) ; sys_platform != \"win32\"", "websockets (>=13.1.0,<14.0.0)"]
+utils = ["numpydoc"]
 
 [[package]]
 name = "mako"
@@ -6621,4 +6623,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.13"
-content-hash = "1b8a1c8115d406ff8e48d09a9eb8f481e76d414de53a0b15db09f1985fe5b379"
+content-hash = "cd8d2a7f8248b6b062b2fddce916c1c7d6fbb8f8116eaa047f7310b34c6563fe"
