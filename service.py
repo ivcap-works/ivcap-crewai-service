@@ -1,3 +1,7 @@
+# Do this before importing other libraries, in case they use posthog during their initialisation
+from no_posthog import no_posthog
+no_posthog()
+
 import datetime
 import os
 # Remove when we use our own telemetry
@@ -12,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 # But this appears not to work, either in crewai 0.121.1 or 0.134.0.
 # We still see requests going out to posthog.com.
 # Perhaps some other library also uses posthog?
+# Instead we monkey-patch it using no_posthog (above), which seems to work.
 os.environ["CREWAI_DISABLE_TELEMETRY"] = "true"
 from crewai import LLM
 from crewai.types.usage_metrics import UsageMetrics
