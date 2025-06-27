@@ -19,7 +19,7 @@ RUN poetry config virtualenvs.create false && poetry install --no-root
 # RUN pip install -r requirements-dev.txt --force-reinstall
 
 # Get service files
-ADD service.py ivcap_tool.py service_types.py vectordb.py events.py ./
+ADD service.py ivcap_tool.py service_types.py vectordb.py events.py logging.json ./
 
 # So we can run it with --user
 RUN mkdir /data && chmod 777 /data
