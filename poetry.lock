@@ -2249,14 +2249,14 @@ plugins = ["setuptools"]
 
 [[package]]
 name = "ivcap-ai-tool"
-version = "0.7.6"
+version = "0.7.7"
 description = "Helper functions for building AI Tools as IVCAP services"
 optional = false
 python-versions = "<4.0,>=3.9"
 groups = ["main"]
 files = [
-    {file = "ivcap_ai_tool-0.7.6-py3-none-any.whl", hash = "sha256:e4320b748d96ae3f43427989722bca1e291e262b99450a584470893ed93a2462"},
-    {file = "ivcap_ai_tool-0.7.6.tar.gz", hash = "sha256:1a6d17e68f5baabb4e14b20f51279e932b55393009249c07b7d9829be9d9241d"},
+    {file = "ivcap_ai_tool-0.7.7-py3-none-any.whl", hash = "sha256:e2b490961ea92ab205504fc21fd4f4dfac85d3f77bb021528d90e03aa8b3a902"},
+    {file = "ivcap_ai_tool-0.7.7.tar.gz", hash = "sha256:bfcb8e472c9183be6265b3675c5fe8c6ee4201d1f5cdfb648c50bf3dda24eb44"},
 ]
 
 [package.dependencies]
@@ -6621,4 +6621,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.13"
-content-hash = "fee49de615c52d79cc8a4abe68f0decc1104d61a2b60867ab135cb08b997002f"
+content-hash = "1b8a1c8115d406ff8e48d09a9eb8f481e76d414de53a0b15db09f1985fe5b379"
