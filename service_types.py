@@ -9,7 +9,7 @@ import logging
 import sys
 from functools import reduce
 
-from typing import Any, Callable, ClassVar, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, ClassVar, Dict, List, Optional, Tuple, Type, Union
 
 import sys
 from urllib.parse import urlencode, urljoin
@@ -17,7 +17,7 @@ import requests
 from pydantic import Field, BaseModel
 from crewai import Agent, Task, Crew, Process, LLM
 from crewai.tasks import TaskOutput
-from langchain_core.tools.base import BaseTool
+from crewai.tools.base_tool import BaseTool
 
 from dotenv import load_dotenv
 #from crewai_tools import SerperDevTool, DirectoryReadTool, FileReadTool, WebsiteSearchTool
@@ -44,14 +44,34 @@ def add_supported_tools(tools: dict[str, Callable[['ToolA'], BaseTool]]):
     global supported_tools
     supported_tools.update(tools)
 
-def init_supported_tools(rel_dir: str):
-    global supported_tools
-    supported_tools = {
-        # "builtin:SerperDevTool": SerperDevTool(),
-        # "builtin:DirectoryReadTool": DirectoryReadTool(directory=rel_dir),
-        # "builtin:FileReadTool": FileReadTool(directory=rel_dir),
-        "builtin:WebsiteSearchTool": WebsiteSearchTool(),
-    }
+class BuiltinWrapper(BaseTool):
+    """A wrapper for builtin tools to be used in CrewAI."""
+
+    name: str
+    description: str
+    args_schema: Type[BaseModel]
+
+    _tool: BaseTool
+
+    def __init__(self, tool: BaseTool):
+        super().__init__(
+            name = tool.name,
+            description = tool.description,
+            args_schema = tool.args_schema,
+        )
+        object.__setattr__(self, "_tool", tool)  # For Pydantic immutability
+
+    def _run(self, **kwargs) -> Any:
+        return self._tool._run(**kwargs)
+
+# def init_supported_tools(rel_dir: str):
+#     global supported_tools
+#     supported_tools = {
+#         # "builtin:SerperDevTool": SerperDevTool(),
+#         # "builtin:DirectoryReadTool": DirectoryReadTool(directory=rel_dir),
+#         # "builtin:FileReadTool": FileReadTool(directory=rel_dir),
+#         "builtin:WebsiteSearchTool": BuiltinWrapper(WebsiteSearchTool()),
+#     }
 
 
 class ToolA(BaseModel):

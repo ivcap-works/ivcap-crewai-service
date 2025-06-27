@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "disable_existing_loggers": false,
+  "formatters": {
+    "default": {
+      "format": "%(asctime)s %(levelname)s (%(name)s): %(message)s",
+      "datefmt": "%Y-%m-%dT%H:%M:%S%z"
+    },
+    "access": {
+      "()": "uvicorn.logging.AccessFormatter",
+      "fmt": "%(asctime)s %(levelname)s (access): \"%(request_line)s\" %(status_code)s",
+      "datefmt": "%Y-%m-%dT%H:%M:%S%z"
+    },
+    "renamed": {
+      "format": "%(asctime)s %(levelname)s (uvicorn): %(message)s",
+      "datefmt": "%Y-%m-%dT%H:%M:%S%z"
+    }
+  },
+  "handlers": {
+    "default": {
+      "class": "logging.StreamHandler",
+      "level": "DEBUG",
+      "formatter": "default",
+      "stream": "ext://sys.stderr"
+    },
+    "access": {
+      "formatter": "access",
+      "class": "logging.StreamHandler",
+      "stream": "ext://sys.stdout"
+    },
+    "uvicorn_error": {
+      "class": "logging.StreamHandler",
+      "level": "DEBUG",
+      "formatter": "renamed",
+      "stream": "ext://sys.stderr"
+    }
+  },
+  "root": {
+    "level": "INFO",
+    "handlers": [
+      "default"
+    ]
+  },
+  "loggers": {
+    "app": {
+      "level": "DEBUG"
+    },
+    "event": {
+      "level": "DEBUG"
+    },
+    "uvicorn.access": {
+      "handlers": [
+        "access"
+      ],
+      "level": "INFO",
+      "propagate": false
+    },
+    "uvicorn.error": {
+      "handlers": [
+        "uvicorn_error"
+      ],
+      "level": "INFO",
+      "propagate": false
+    },
+    "LiteLLM": {
+      "level": "INFO",
+      "handlers": [
+        "default"
+      ],
+      "propagate": true
+    },
+    "embedchain.llm.base": {
+      "level": "WARNING",
+      "handlers": [
+        "default"
+      ],
+      "propagate": true
+    },
+    "backoff": {
+      "level": "FATAL",
+      "handlers": [
+        "default"
+      ],
+      "propagate": true
+    }
+  }
+}
