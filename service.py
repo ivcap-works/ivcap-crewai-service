@@ -1,3 +1,7 @@
+# Do this before importing other libraries, in case they use posthog during their initialisation
+from no_posthog import no_posthog
+no_posthog()
+
 import datetime
 import os
 # Remove when we use our own telemetry
@@ -7,19 +11,31 @@ from typing import Dict, List, Optional
 import argparse
 from dotenv import load_dotenv
 from pydantic import BaseModel, ConfigDict, Field
+
+# According to https://docs.crewai.com/en/telemetry#telemetry this will disable crewAI's telemetry.
+# But this appears not to work, either in crewai 0.121.1 or 0.134.0.
+# We still see requests going out to posthog.com.
+# Perhaps some other library also uses posthog?
+# Instead we monkey-patch it using no_posthog (above), which seems to work.
+os.environ["CREWAI_DISABLE_TELEMETRY"] = "true"
 from crewai import LLM
 from crewai.types.usage_metrics import UsageMetrics
 from crewai_tools import WebsiteSearchTool
+
 from ivcap_service import getLogger, Service, JobContext
 from ivcap_ai_tool import start_tool_server, ToolOptions, ivcap_ai_tool, logging_init
 
-from service_types import CrewA, TaskResponse, add_supported_tools
+from service_types import BuiltinWrapper, CrewA, TaskResponse, add_supported_tools
 
 # Load environment variables from the .env file
 load_dotenv()
 
-logging_init()
+logging_init("./logging.json")
 logger = getLogger("app")
+
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings("ignore", category=PendingDeprecationWarning)
 
 service = Service(
     name="CrewAI Agent Runner",
@@ -57,7 +73,7 @@ add_supported_tools({
     # "urn:sd-core:crewai.builtin.serperDevTool": lambda _, ctxt: SerperDevTool(config=ctxt.vectordb_config),
     # "urn:sd-core:crewai.builtin.directoryReadTool": lambda _, ctxt: DirectoryReadTool(directory=ctxt.tmp_dir),
     # "urn:sd-core:crewai.builtin.fileReadTool": lambda _, ctxt: FileReadTool(directory=ctxt.tmp_dir),
-    "urn:sd-core:crewai.builtin.websiteSearchTool": lambda _, ctxt: WebsiteSearchTool(config=ctxt.vectordb_config),
+    "urn:sd-core:crewai.builtin.websiteSearchTool": lambda _, ctxt: BuiltinWrapper(WebsiteSearchTool(config=ctxt.vectordb_config)),
 })
 
 @ivcap_ai_tool("/", opts=ToolOptions(tags=["CrewAI Runner"]))

@@ -38,7 +38,7 @@ class EventListener(BaseEventListener):
         # It's hard to get a tool_call_id since CrewAI doesn't assign something like this.
         # Instead we'll string together the source_fingerprint, the tool name and its args to try to get as close
         # to a unique identifier as we can so that ToolCallStart and ToolCallEnd can be associated.
-        return f"{event.source_fingerprint}:{event.tool_name}({json.dumps(event.tool_args)})"
+        return f"{event.source_fingerprint}:{event.tool_name}({json.dumps(event.tool_args)})"[:50]
 
     def setup_listeners(self, bus):
 
@@ -63,37 +63,39 @@ class EventListener(BaseEventListener):
         def crew_started(source, event: CrewKickoffStartedEvent):
             r = get_event_reporter()
             # CrewKickoffStarted -> RunStarted
-            if r: r.run_started(thread_id=str(threading.get_native_id()), run_id=get_job_id(), raw_event=event.to_json())
+            if r: r.run_started(thread_id=str(threading.get_native_id()), run_id=get_job_id())
 
         @bus.on(CrewKickoffCompletedEvent)
         def crew_completed(source, event):
             r = get_event_reporter()
             # CrewKickoffCompleted -> RunFinished
-            if r: r.run_finished(thread_id=str(threading.get_native_id()), run_id=get_job_id(), raw_event=event.to_json())
+            if r: r.run_finished(thread_id=str(threading.get_native_id()), run_id=get_job_id())
 
         @bus.on(AgentExecutionStartedEvent)
         def agent_started(source, event):
             r = get_event_reporter()
             # AgentExecutionStarted -> StepStarted
-            if r: r.step_started(step_name=self.describe_agent_task(event.agent, event.task), raw_event=event.to_json())
+            if r: r.step_started(step_name=self.describe_agent_task(event.agent, event.task)[:30])
 
         @bus.on(AgentExecutionCompletedEvent)
         def agent_completed(source, event):
             r = get_event_reporter()
             # AgentExecutionCompleted -> StepFinished
-            if r: r.step_finished(step_name=self.describe_agent_task(event.agent, event.task), raw_event=event.to_json())
+            if r: r.step_finished(step_name=self.describe_agent_task(event.agent, event.task)[:30])
 
         @bus.on(TaskStartedEvent)
-        def task_started(source, event):
+        def task_started(source, event: TaskStartedEvent):
             r = get_event_reporter()
             # TaskStarted -> StepStarted
-            if r: r.step_started(step_name=f"{event.task.name}: {event.task.description}", raw_event=event.to_json())
+            n = f"{event.task.name}: {event.task.description[:30]}"
+            if r: r.step_started(step_name=n[:30])
 
         @bus.on(TaskCompletedEvent)
         def task_completed(source, event):
             r = get_event_reporter()
             # TaskCompleted -> StepFinished
-            if r: r.step_finished(step_name=f"{event.task.name}: {event.task.description}", raw_event=event.to_json())
+            step_name=f"{event.task.name}: {event.task.description}"
+            if r: r.step_finished(step_name=step_name[:30])
 
         @bus.on(ToolUsageStartedEvent)
         def tool_started(source, event):
@@ -105,7 +107,7 @@ class EventListener(BaseEventListener):
         def tool_finished(source, event):
             r = get_event_reporter()
             # ToolUsageFinished -> ToolCallEnd
-            if r: r.tool_call_end(tool_call_id=self.tool_call_id(event), raw_event=event.to_json())
+            if r: r.tool_call_end(tool_call_id=self.tool_call_id(event))
 
         @bus.on(ToolUsageErrorEvent)
         def tool_failed(source, event):
@@ -121,20 +123,20 @@ class EventListener(BaseEventListener):
             # for these events either.
             # We can't even use a hash of the message(s) sent because these aren't reported in the LLMStreamChunkEvent or LLMCallCompletedEvent.
             # The role of "assistant" came out of an error insisting it be this...
-            if r: r.text_message_start(message_id="?", role="assistant", raw_event=event.to_json())
+            if r: r.text_message_start(message_id="?", role="assistant")
 
         @bus.on(LLMStreamChunkEvent)
         def llm_stream_chunk(source, event):
             r = get_event_reporter()
             # LLMStreamChunkEvent -> TextMessageContent
-            if r: r.text_message_content(message_id="?", delta=event.chunk, raw_event=event.to_json())
+            if r: r.text_message_content(message_id="?", delta=event.chunk)
 
         @bus.on(LLMCallCompletedEvent)
         def llm_completed(source, event):
             r = get_event_reporter()
             # LLMCallCompleted -> TextMessageEnd
             # The response is available in `event.response` but ag_ui doesn't want it.
-            if r: r.text_message_end(message_id="?", raw_event=event.to_json())
+            if r: r.text_message_end(message_id="?")
 
         @bus.on(LLMCallFailedEvent)
         def llm_failed(source, event):
