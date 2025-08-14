@@ -11,4 +11,5 @@ system-view.png
 UNUSED
 
 /.direnv/
-/.envrc
+__service.json
+runs

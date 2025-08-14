@@ -77,12 +77,15 @@ clean:
 	rm -rf db
 	rm log.txt
 
+TARGET_ARCH=arm64
+DOCKER_NAME=ivcap_crew_ai
+DOCKER_VERSION=738762e
 docker-run: #docker-build
 	docker run -it \
 		-p ${PORT}:${PORT} \
 		--platform=linux/${TARGET_ARCH} \
 		--rm \
-		${DOCKER_NAME}_${TARGET_ARCH} --port ${PORT}
+		${DOCKER_NAME}_${TARGET_ARCH}:${DOCKER_VERSION} --port ${PORT}
 
 
 FORCE: run

@@ -19,7 +19,7 @@ RUN poetry config virtualenvs.create false && poetry install --no-root
 # RUN pip install -r requirements-dev.txt --force-reinstall
 
 # Get service files
-ADD service.py ivcap_tool.py service_types.py vectordb.py events.py logging.json ./
+ADD *.py logging.json ./
 
 # So we can run it with --user
 RUN mkdir /data && chmod 777 /data
@@ -37,4 +37,4 @@ ADD .env .
 # Command to run
 ENV CREWAI_STORAGE_DIR=/data
 
-ENTRYPOINT ["python", "/app/service.py"]
+ENTRYPOINT ["python", "/app/service.py", "--port", "80"]

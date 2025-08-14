@@ -7,6 +7,8 @@ from typing import Dict, List, Optional
 import argparse
 from dotenv import load_dotenv
 from pydantic import BaseModel, ConfigDict, Field
+import utils # noqa  # imported for side effects (runs module-level code)
+
 from crewai import LLM
 from crewai.types.usage_metrics import UsageMetrics
 from crewai_tools import WebsiteSearchTool
@@ -75,9 +77,11 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         crewDef = req.crew
     if not crewDef:
         raise ValueError("No crew definition provided.")
+    if not crewDef.name:
+        crewDef.name = req.name
 
     llm = LLM(model="gpt-4o", api_key=os.getenv("OPENAI_API_KEY"))
-    crew = crewDef.as_crew(llm=llm, memory=False, verbose=False, planning=True)
+    crew = crewDef.as_crew(llm=llm, memory=False, verbose=False, planning=True, job_id=jobCtxt.job_id)
 
     logger.info(f"processing crew '{req.name}' for '{jobCtxt.job_id}'")
     # (crew, ctxt, template) = crew_from_file(crew_fd, inputs, log_fd)

@@ -45,7 +45,13 @@
     "app": {
       "level": "DEBUG"
     },
+    "app.event": {
+      "level": "INFO"
+    },
     "event": {
+      "level": "DEBUG"
+    },
+    "ivcap": {
       "level": "DEBUG"
     },
     "uvicorn.access": {
@@ -63,13 +69,20 @@
       "propagate": false
     },
     "LiteLLM": {
-      "level": "INFO",
+      "level": "WARNING",
       "handlers": [
         "default"
       ],
       "propagate": true
     },
     "embedchain.llm.base": {
+      "level": "WARNING",
+      "handlers": [
+        "default"
+      ],
+      "propagate": true
+    },
+    "embedchain.chunkers": {
       "level": "WARNING",
       "handlers": [
         "default"
