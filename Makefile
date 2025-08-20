@@ -40,13 +40,16 @@ test-job:
 		${TEST_SERVER}/1/services2/${SERVICE_ID}/jobs
 
 test-job-ivcap:
-	TOKEN=$(shell ivcap context get access-token --refresh-token); \
-	curl -i -X POST \
-	-H "content-type: application/json" \
-	-H "Timeout: ${TIMEOUT}" \
-	-H "Authorization: Bearer $$TOKEN" \
-	--data @${TEST_REQUEST} \
-	$(shell ivcap context get url)/1/services2/${SERVICE_ID}/jobs
+	poetry ivcap exec-job ${TEST_REQUEST} -- --stream
+
+# test-job-ivcap:
+# 	TOKEN=$(shell ivcap context get access-token --refresh-token); \
+# 	curl -i -X POST \
+# 	-H "content-type: application/json" \
+# 	-H "Timeout: ${TIMEOUT}" \
+# 	-H "Authorization: Bearer $$TOKEN" \
+# 	--data @${TEST_REQUEST} \
+# 	$(shell ivcap context get url)/1/services2/${SERVICE_ID}/jobs
 
 JOB_ID=00000000-0000-0000-0000-000000000000
 test-get-result-ivcap:
@@ -56,6 +59,19 @@ test-get-result-ivcap:
 	-H "Timeout: 20" \
 	-H "Authorization: Bearer $$TOKEN" \
 	$(shell ivcap context get url)/1/services2/${SERVICE_ID}/jobs/${JOB_ID}?with-result-content=true | jq
+
+test-get-result:
+	curl  \
+		-H "Authorization: Bearer $(shell ivcap context get access-token --refresh-token)"  \
+		-H "Content-Type: application/json" \
+		${TEST_SERVER}/1/services2/${SERVICE_ID}/jobs/${JOB_ID}?with-result-content=true | jq
+
+test-get-events:
+	curl  \
+		--no-buffer \
+		-H "Authorization: Bearer $(shell ivcap context get access-token --refresh-token)"  \
+		-H "Accept: text/event-stream" \
+		${TEST_SERVER}/1/services2/${SERVICE_ID}/jobs/${JOB_ID}/events
 
 list-results-ivcap:
 	TOKEN=$(shell ivcap context get access-token --refresh-token); \

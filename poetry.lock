@@ -2168,14 +2168,14 @@ tuspy = ">=1.0.0"
 
 [[package]]
 name = "ivcap-service"
-version = "0.6.6"
+version = "0.6.7"
 description = "SDK library for building services for the IVCAP platform"
 optional = false
 python-versions = "<4.0,>=3.10"
 groups = ["main"]
 files = [
-    {file = "ivcap_service-0.6.6-py3-none-any.whl", hash = "sha256:958533676f320c05868fe4b7e75089f0fd18a72729582ccd2636d4017861ebcc"},
-    {file = "ivcap_service-0.6.6.tar.gz", hash = "sha256:32e631f2d5d42222a5a4ae18c03df7b971122d1f893694c69beed4ab59625eb9"},
+    {file = "ivcap_service-0.6.7-py3-none-any.whl", hash = "sha256:c0920c306b21b9587cbeb9055585149c70a125ae98139d6b63286e3f946cbcd1"},
+    {file = "ivcap_service-0.6.7.tar.gz", hash = "sha256:9ab7dc45a9b934312fb3179b89f80683b6adb03c9ad6aab3d11b0a533e211fdc"},
 ]
 
 [package.dependencies]
@@ -6522,4 +6522,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.13"
-content-hash = "296ec5f7627889401bf245adf24708e82d27f151789f242fab01b63bc2910445"
+content-hash = "f69c83e3d8a124773edf298b7c901d79061853b44da93c83ea723a1435c0eebe"
