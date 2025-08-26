@@ -1,6 +1,6 @@
 [project]
 name = "ivcap-crew-ai"
-version = "0.1.0"
+version = "0.2.0"
 description = "Executes queries or chats with the CrewAI agent framework."
 authors = [
     {name = "Max Ott",email = "max.ott@data61.csiro.au"}

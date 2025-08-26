@@ -47,7 +47,7 @@ class _TaskStartedEvent(BaseEvent):
     agent: str = Field(description="Name of agent executing this taks")
 
 class _TaskFinishedEvent(BaseEvent):
-    SCHEMA: ClassVar[str] = "urn:sd-core:schema:crewai.event.task.started.1"
+    SCHEMA: ClassVar[str] = "urn:sd-core:schema:crewai.event.task.finished.1"
     id: int = Field(description="ID of task")
     output: str = Field(description="The output from this task")
     agent: str = Field(description="Name of agent executing this taks")
