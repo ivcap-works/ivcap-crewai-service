@@ -1,5 +1,8 @@
+
 import json
 import threading
+import hashlib
+from typing import ClassVar, Optional
 
 from crewai.utilities.events import (
     CrewKickoffStartedEvent,
@@ -12,17 +15,70 @@ from crewai.utilities.events import (
     ToolUsageStartedEvent,
     ToolUsageFinishedEvent,
     ToolUsageErrorEvent,
-    LLMCallStartedEvent,
-    LLMStreamChunkEvent,
-    LLMCallCompletedEvent,
+    # LLMCallStartedEvent,
+    # LLMStreamChunkEvent,
+    # LLMCallCompletedEvent,
     LLMCallFailedEvent,
 )
 from crewai.utilities.events.base_event_listener import BaseEventListener
 from crewai.agents.agent_builder.base_agent import BaseAgent
 
+from ivcap_service import BaseEvent, getLogger
+from pydantic import Field
+
+logger = getLogger("app.event")
+
+class _AgentStartedEvent(BaseEvent):
+    SCHEMA: ClassVar[str] = "urn:sd-core:schema:crewai.event.agent.started.1"
+    id: int = Field(description="ID of agent")
+    agent: str = Field(description="Name of agent")
+    prompt: str = Field(description="Prompt used by agent")
+
+class _AgentCompletedEvent(BaseEvent):
+    SCHEMA: ClassVar[str] = "urn:sd-core:schema:crewai.event.agent.completed.1"
+    id: int = Field(description="ID of agent")
+    agent: str = Field(description="Name of agent")
+    output: str = Field(description="The report of the agent")
+
+class _TaskStartedEvent(BaseEvent):
+    SCHEMA: ClassVar[str] = "urn:sd-core:schema:crewai.event.task.started.1"
+    id: int = Field(description="ID of task")
+    description: str = Field(description="Description of task")
+    agent: str = Field(description="Name of agent executing this taks")
+
+class _TaskFinishedEvent(BaseEvent):
+    SCHEMA: ClassVar[str] = "urn:sd-core:schema:crewai.event.task.finished.1"
+    id: int = Field(description="ID of task")
+    output: str = Field(description="The output from this task")
+    agent: str = Field(description="Name of agent executing this taks")
+
+class _ToolStartedEvent(BaseEvent):
+    SCHEMA: ClassVar[str] = "urn:sd-core:schema:crewai.event.tool.started.1"
+    id: int = Field(description="ID of tool execution")
+    tool_name: str = Field(description="Name of tool")
+    tool_args: str  = Field(description="Arguments to tool")
+    agent: str = Field(description="Agent using this tool")
+
+class _ToolFinishedEvent(BaseEvent):
+    SCHEMA: ClassVar[str] = "urn:sd-core:schema:crewai.event.tool.finished.1"
+    id: int = Field(description="ID of tool execution")
+    tool_name: str = Field(description="Name of tool")
+    output: str  = Field(description="Result returned by tool")
+    agent: str = Field(description="Agent using this tool")
+
+class _ToolFailedEvent(BaseEvent):
+    SCHEMA: ClassVar[str] = "urn:sd-core:schema:crewai.event.tool.failed.1"
+    id: int = Field(description="ID of tool execution")
+    tool_name: str = Field(description="Name of tool")
+    error: str  = Field(description="Error reported")
+
+class _LlmCallFailedEvent(BaseEvent):
+    SCHEMA: ClassVar[str] = "urn:sd-core:schema:crewai.event.llm.failed.1"
+    id: int = Field(description="ID of LLM call")
+    error: str  = Field(description="Error reported")
+    task: Optional[str] = Field(None, description="Name of task this error occurs in")
 
 from ivcap_ai_tool import (get_event_reporter, get_job_id)
-
 
 class EventListener(BaseEventListener):
     def __init__(self):
@@ -38,107 +94,115 @@ class EventListener(BaseEventListener):
         # It's hard to get a tool_call_id since CrewAI doesn't assign something like this.
         # Instead we'll string together the source_fingerprint, the tool name and its args to try to get as close
         # to a unique identifier as we can so that ToolCallStart and ToolCallEnd can be associated.
-        return f"{event.source_fingerprint}:{event.tool_name}({json.dumps(event.tool_args)})"[:50]
+        ta = event.tool_args
+        if not isinstance(ta, str):
+            ta = json.dumps(event.tool_args)
+        s = f"{event.tool_name}:{ta}"
+        h = hashlib.md5(s.encode('utf-8')).hexdigest()
+        return h
+
+    def _id(self, source):
+        return source.__hash__()
 
     def setup_listeners(self, bus):
+        # @bus.on(CrewKickoffStartedEvent)
+        # def crew_started(source, event: CrewKickoffStartedEvent):
+        #     r = get_event_reporter()
+        #     # CrewKickoffStarted -> RunStarted
+        #     if r: r.run_started(thread_id=str(threading.get_native_id()), run_id=get_job_id())
 
-        # The general task in the event handlers below is to translate
-        # [CrewAI events](https://docs.crewai.com/concepts/event-listener#available-event-types)
-        # into [ag_ui events](https://docs.ag-ui.com/concepts/events).
-        # Unfortunately there is a bit of a mismatch here, since ag_ui
-        # expects that a run is of a single agent: "These events represent the lifecycle of an agent run.",
-        # whereas a CrewAI crew run consists of multiple agents being run.
-        # We have chosen to translate the whole crew being run as an ag_ui 'run'.
-        # Individual agents being run then translate to ag_ui 'steps'.
-
-        # TODO: Can the repeated calls to `get_event_reporter()` be replaced with a single member variable?
-        # It would de-clutter the code but does get_event_reporter() return the same object throughout?
-
-        # Note: We have chosen to populate `raw_event` arguments with calls to `event.to_json()`, (from `CrewBaseEvent`), which
-        # excludes the `crew` field but otherwise converts the
-        # python object to json.
-        # This may or may not be the right call.
-
-        @bus.on(CrewKickoffStartedEvent)
-        def crew_started(source, event: CrewKickoffStartedEvent):
-            r = get_event_reporter()
-            # CrewKickoffStarted -> RunStarted
-            if r: r.run_started(thread_id=str(threading.get_native_id()), run_id=get_job_id())
-
-        @bus.on(CrewKickoffCompletedEvent)
-        def crew_completed(source, event):
-            r = get_event_reporter()
-            # CrewKickoffCompleted -> RunFinished
-            if r: r.run_finished(thread_id=str(threading.get_native_id()), run_id=get_job_id())
+        # @bus.on(CrewKickoffCompletedEvent)
+        # def crew_completed(source, event):
+        #     r = get_event_reporter()
+        #     # CrewKickoffCompleted -> RunFinished
+        #     if r: r.run_finished(thread_id=str(threading.get_native_id()), run_id=get_job_id())
 
         @bus.on(AgentExecutionStartedEvent)
-        def agent_started(source, event):
-            r = get_event_reporter()
-            # AgentExecutionStarted -> StepStarted
-            if r: r.step_started(step_name=self.describe_agent_task(event.agent, event.task)[:30])
+        def agent_started(source, event: AgentExecutionStartedEvent):
+            id = self._id(source)
+            logger.info(f"{get_job_id()}: agent {id} started")
+            if (r := get_event_reporter()):
+                event = _AgentStartedEvent(id=id, agent=event.agent.role, prompt=event.task_prompt)
+                r.emit(event)
 
         @bus.on(AgentExecutionCompletedEvent)
-        def agent_completed(source, event):
-            r = get_event_reporter()
-            # AgentExecutionCompleted -> StepFinished
-            if r: r.step_finished(step_name=self.describe_agent_task(event.agent, event.task)[:30])
+        def agent_completed(source, e):
+            id = self._id(source)
+            logger.info(f"{get_job_id()}: agent {id} completed")
+            if (r := get_event_reporter()):
+                event = _AgentCompletedEvent(id=id, agent=e.agent.role, output=e.output)
+                r.emit(event)
 
         @bus.on(TaskStartedEvent)
-        def task_started(source, event: TaskStartedEvent):
-            r = get_event_reporter()
-            # TaskStarted -> StepStarted
-            n = f"{event.task.name}: {event.task.description[:30]}"
-            if r: r.step_started(step_name=n[:30])
+        def task_started(source, e: _TaskStartedEvent):
+            id = self._id(source)
+            logger.info(f"{get_job_id()}: task {id} strted")
+            if (r := get_event_reporter()):
+                task = e.task
+                event = _TaskStartedEvent(id=id, description=task.description, agent=task.agent.role)
+                r.emit(event)
 
         @bus.on(TaskCompletedEvent)
-        def task_completed(source, event):
-            r = get_event_reporter()
-            # TaskCompleted -> StepFinished
-            step_name=f"{event.task.name}: {event.task.description}"
-            if r: r.step_finished(step_name=step_name[:30])
+        def task_completed(source, e: TaskCompletedEvent):
+            id = self._id(source)
+            logger.info(f"{get_job_id()}: task {id} completed")
+            if (r := get_event_reporter()):
+                task = e.task
+                output = e.output
+                event = _TaskFinishedEvent(id=id, output=output.raw, agent=task.agent.role)
+                r.emit(event)
 
         @bus.on(ToolUsageStartedEvent)
-        def tool_started(source, event):
-            r = get_event_reporter()
-            # ToolUsageStarted -> ToolCallStart
-            if r: r.tool_call_start(tool_call_id=self.tool_call_id(event), tool_call_name=event.tool_name)
+        def tool_started(source, e: ToolUsageStartedEvent):
+            id = self._id(source)
+            logger.info(f"{get_job_id()}: tool {id} started")
+            if (r := get_event_reporter()):
+                event = _ToolStartedEvent(id=id, tool_name=e.tool_name, tool_args=e.tool_args, agent=e.agent_role)
+                r.emit(event)
 
         @bus.on(ToolUsageFinishedEvent)
-        def tool_finished(source, event):
-            r = get_event_reporter()
-            # ToolUsageFinished -> ToolCallEnd
-            if r: r.tool_call_end(tool_call_id=self.tool_call_id(event))
+        def tool_finished(source, e: ToolUsageFinishedEvent):
+            id = self._id(source)
+            logger.info(f"{get_job_id()}: tool {id} finished")
+            if (r := get_event_reporter()):
+                event = _ToolFinishedEvent(id=id, tool_name=e.tool_name, output=e.output, agent=e.agent_role)
+                r.emit(event)
 
         @bus.on(ToolUsageErrorEvent)
-        def tool_failed(source, event):
-            r = get_event_reporter()
-            # ToolUsageError -> RunError
-            if r: r.run_error(f"Tool {event.tool_name} ({self.tool_call_id(event)} failed: '{event.error}'", code="TOOL_ERROR")
+        def tool_failed(source, e: ToolUsageErrorEvent):
+            id = self._id(source)
+            logger.info(f"{get_job_id()}: tool {id} failed - {e.error}")
+            if (r := get_event_reporter()):
+                event = _ToolFailedEvent(id=id, tool_name=e.tool_name, error=str(e.error))
+                r.emit(event)
 
-        @bus.on(LLMCallStartedEvent)
-        def llm_started(source, event):
-            r = get_event_reporter()
-            # LLMCallStarted -> TextMessageStart
-            # Unfortunately CrewAI doesn't give LLM calls a unique id, and the source_fingerprint doesn't seem to be set
-            # for these events either.
-            # We can't even use a hash of the message(s) sent because these aren't reported in the LLMStreamChunkEvent or LLMCallCompletedEvent.
-            # The role of "assistant" came out of an error insisting it be this...
-            if r: r.text_message_start(message_id="?", role="assistant")
+        # @bus.on(LLMCallStartedEvent)
+        # def llm_started(source, event):
+        #     r = get_event_reporter()
+        #     # LLMCallStarted -> TextMessageStart
+        #     # Unfortunately CrewAI doesn't give LLM calls a unique id, and the source_fingerprint doesn't seem to be set
+        #     # for these events either.
+        #     # We can't even use a hash of the message(s) sent because these aren't reported in the LLMStreamChunkEvent or LLMCallCompletedEvent.
+        #     # The role of "assistant" came out of an error insisting it be this...
+        #     if r: r.text_message_start(message_id="?", role="assistant")
 
-        @bus.on(LLMStreamChunkEvent)
-        def llm_stream_chunk(source, event):
-            r = get_event_reporter()
-            # LLMStreamChunkEvent -> TextMessageContent
-            if r: r.text_message_content(message_id="?", delta=event.chunk)
+        # @bus.on(LLMStreamChunkEvent)
+        # def llm_stream_chunk(source, event):
+        #     r = get_event_reporter()
+        #     # LLMStreamChunkEvent -> TextMessageContent
+        #     if r: r.text_message_content(message_id="?", delta=event.chunk)
 
-        @bus.on(LLMCallCompletedEvent)
-        def llm_completed(source, event):
-            r = get_event_reporter()
-            # LLMCallCompleted -> TextMessageEnd
-            # The response is available in `event.response` but ag_ui doesn't want it.
-            if r: r.text_message_end(message_id="?")
+        # @bus.on(LLMCallCompletedEvent)
+        # def llm_completed(source, event):
+        #     r = get_event_reporter()
+        #     # LLMCallCompleted -> TextMessageEnd
+        #     # The response is available in `event.response` but ag_ui doesn't want it.
+        #     if r: r.text_message_end(message_id="?")
 
         @bus.on(LLMCallFailedEvent)
-        def llm_failed(source, event):
-            r = get_event_reporter()
-            if r: r.run_error(f"LLM call failed: '{event.error}'", code="LLM_CALL_FAILED")
+        def llm_failed(source, e: LLMCallFailedEvent):
+            id = self._id(source)
+            logger.warning(f"{get_job_id()}: llm call failed - {e.error}")
+            if (r := get_event_reporter()):
+                event = _LlmCallFailedEvent(id=id, task=e.task_name, error=str(e.error))
+                r.emit(event)

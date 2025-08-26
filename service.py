@@ -11,6 +11,7 @@ from typing import Dict, List, Optional
 import argparse
 from dotenv import load_dotenv
 from pydantic import BaseModel, ConfigDict, Field
+import utils # noqa  # imported for side effects (runs module-level code)
 
 # According to https://docs.crewai.com/en/telemetry#telemetry this will disable crewAI's telemetry.
 # But this appears not to work, either in crewai 0.121.1 or 0.134.0.
@@ -87,9 +88,11 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         crewDef = req.crew
     if not crewDef:
         raise ValueError("No crew definition provided.")
+    if not crewDef.name:
+        crewDef.name = req.name
 
     llm = LLM(model="gpt-4o", api_key=os.getenv("OPENAI_API_KEY"))
-    crew = crewDef.as_crew(llm=llm, memory=False, verbose=False, planning=True)
+    crew = crewDef.as_crew(llm=llm, memory=False, verbose=False, planning=True, job_id=jobCtxt.job_id)
 
     logger.info(f"processing crew '{req.name}' for '{jobCtxt.job_id}'")
     # (crew, ctxt, template) = crew_from_file(crew_fd, inputs, log_fd)
@@ -123,7 +126,6 @@ def service_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
         os.setenv("LITELLM_PROXY", args.litellm_proxy)
 
     logger.info(f"OTEL_SDK_DISABLED={os.getenv('OTEL_SDK_DISABLED')}")
-
     return args
 
 if __name__ == "__main__":

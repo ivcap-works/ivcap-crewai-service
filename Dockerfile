@@ -37,4 +37,4 @@ ADD .env .
 # Command to run
 ENV CREWAI_STORAGE_DIR=/data
 
-ENTRYPOINT ["python", "/app/service.py"]
+ENTRYPOINT ["python", "/app/service.py", "--port", "80"]

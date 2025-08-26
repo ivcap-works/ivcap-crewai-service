@@ -1,4 +1,5 @@
 from typing import Optional
+
 from embedchain.factory import VectorDBFactory
 from pydantic import BaseModel
 import chromadb
@@ -8,19 +9,35 @@ from chromadb.config import Settings
 from embedchain.vectordb.chroma import ChromaDB, ChromaDbConfig
 
 
-def wrap_client_init(func):
-    def wrapper(self, settings: Settings, **kwargs):
-        settings.is_persistent = False
-        return func(self, settings=settings, **kwargs)
-    return wrapper
-Client.__init__ = wrap_client_init(Client.__init__)
+# defaultDB = None
+# def wrap_client_init(func):
+#     def wrapper(self, settings: Settings, **kwargs):
+#         #settings.is_persistent = False
+#         # hijacking 'tenant_id' to set the client tenant
+#         job_id = settings.tenant_id
+#         if job_id == 'default':
+#             # first time around
+#             return func(self, settings=settings, **kwargs)
 
-def create_chroma_db() -> ChromaDB:
-    db = ChromaDB(config=ChromaDbConfig(chroma_settings={"is_persistent": False}))
+#         settings.tenant_id = 'default'
+#         adminClient = defaultDB.client._admin_client
+#         adminClient.create_tenant(job_id)
+#         adminClient.create_database(job_id, job_id)
+#         return func(self, settings=settings, tenant=job_id, database=job_id)
+#     return wrapper
+
+def create_chroma_db(job_id: str) -> ChromaDB:
+    # global defaultDB
+    # if not defaultDB:
+    #     Client.__init__ = wrap_client_init(Client.__init__)
+    #     defaultDB = ChromaDB(config=ChromaDbConfig(dir="XXX", chroma_settings={"is_persistent": True, "persist_directory": "XXX"}))
+
+    # db = ChromaDB(config=ChromaDbConfig(dir=job_id, chroma_settings={"is_persistent": False, "tenant_id": job_id}))
+    db = ChromaDB(config=ChromaDbConfig(dir=f"runs/{job_id}"))
     return db
 
-def create_vectordb_config() -> dict:
-    db = create_chroma_db()
+def create_vectordb_config(job_id: str) -> dict:
+    db = create_chroma_db(job_id)
     config = {
         "vectordb": {
             "provider": "chroma",

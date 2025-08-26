@@ -187,8 +187,8 @@ class CrewA(BaseModel):
         description="Maximum number of requests per minute for the crew execution to be respected.",
     )
 
-    def as_crew(self, llm: LLM, **kwargs) -> Crew:
-        ctxt = Context(vectordb_config=create_vectordb_config())
+    def as_crew(self, llm: LLM, job_id: str, **kwargs) -> Crew:
+        ctxt = Context(vectordb_config=create_vectordb_config(job_id))
         agents = {}
         for a in self.agents: agents[a.name] = a.as_crew_agent(llm=llm, ctxt=ctxt)
         tasks = [t.as_crew_task(agents, ctxt=ctxt) for t in self.tasks]
