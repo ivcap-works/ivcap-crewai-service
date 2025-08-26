@@ -1,3 +1,7 @@
+# Do this before importing other libraries, in case they use posthog during their initialisation
+from no_posthog import no_posthog
+no_posthog()
+
 import datetime
 import os
 # Remove when we use our own telemetry
@@ -9,9 +13,16 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, ConfigDict, Field
 import utils # noqa  # imported for side effects (runs module-level code)
 
+# According to https://docs.crewai.com/en/telemetry#telemetry this will disable crewAI's telemetry.
+# But this appears not to work, either in crewai 0.121.1 or 0.134.0.
+# We still see requests going out to posthog.com.
+# Perhaps some other library also uses posthog?
+# Instead we monkey-patch it using no_posthog (above), which seems to work.
+os.environ["CREWAI_DISABLE_TELEMETRY"] = "true"
 from crewai import LLM
 from crewai.types.usage_metrics import UsageMetrics
 from crewai_tools import WebsiteSearchTool
+
 from ivcap_service import getLogger, Service, JobContext
 from ivcap_ai_tool import start_tool_server, ToolOptions, ivcap_ai_tool, logging_init
 
@@ -115,7 +126,6 @@ def service_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
         os.setenv("LITELLM_PROXY", args.litellm_proxy)
 
     logger.info(f"OTEL_SDK_DISABLED={os.getenv('OTEL_SDK_DISABLED')}")
-
     return args
 
 if __name__ == "__main__":

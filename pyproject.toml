@@ -6,6 +6,7 @@ authors = [
     {name = "Max Ott",email = "max.ott@data61.csiro.au"}
 ]
 readme = "README.md"
+
 requires-python = ">=3.10,<3.13"
 dependencies = [
     "crewai (>=0.157.0,<0.158.0)",
@@ -19,6 +20,9 @@ dependencies = [
     "ivcap-service (>=0.6.7,<0.7.0)"
 ]
 
+[tool.poetry]
+    package-mode = false
+
 [tool.poetry-plugin-ivcap]
 service-file = "service.py"
 service-id = "urn:ivcap:service:01555c28-32d0-5839-b92b-f3e52410d6dd"
@@ -26,7 +30,6 @@ service-type = "lambda"
 port = 8077
 # docker
 #docker-run-opts = ["--port", "9999" ]
-
 
 
 [build-system]
