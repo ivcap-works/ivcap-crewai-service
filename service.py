@@ -328,18 +328,18 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
             if hasattr(jobCtxt.request, '__dict__'):
                 logger.debug(f"JobContext.request attributes: {list(jobCtxt.request.__dict__.keys())}")
         
-        if jwt_token:
-            logger.info(f"✓ JWT token detected (length: {len(jwt_token)})")
-            # Set environment variable for IVCAP client to authenticate artifact downloads
-            os.environ["IVCAP_JWT"] = jwt_token
-            # Set job-isolated CrewAI storage to prevent cross-contamination between runs
-            os.environ["CREWAI_STORAGE_DIR"] = f"runs/{jobCtxt.job_id}"
-            logger.info(f"✓ Set CREWAI_STORAGE_DIR for complete job isolation")
-        else:
-            logger.warning("✗ No JWT token found in JobContext")
-            # Still set job-isolated storage even without JWT
-            os.environ["CREWAI_STORAGE_DIR"] = f"runs/{jobCtxt.job_id}"
-            logger.info(f"✓ Set CREWAI_STORAGE_DIR for job isolation (no JWT)")
+        # if jwt_token:
+        #     logger.info(f"✓ JWT token detected (length: {len(jwt_token)})")
+        #     # Set environment variable for IVCAP client to authenticate artifact downloads
+        #     # os.environ["IVCAP_JWT"] = jwt_token
+        #     # Set job-isolated CrewAI storage to prevent cross-contamination between runs
+        #     # os.environ["CREWAI_STORAGE_DIR"] = f"runs/{jobCtxt.job_id}"
+        #     logger.info(f"✓ Set CREWAI_STORAGE_DIR for complete job isolation")
+        # else:
+        #     logger.warning("✗ No JWT token found in JobContext")
+        #     # Still set job-isolated storage even without JWT
+        #     # os.environ["CREWAI_STORAGE_DIR"] = f"runs/{jobCtxt.job_id}"
+        #     logger.info(f"✓ Set CREWAI_STORAGE_DIR for job isolation (no JWT)")
         
         # ==================== STEP 2: ARTIFACTS ====================
         if req.artifact_urns:
