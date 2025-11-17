@@ -24,7 +24,7 @@ from dotenv import load_dotenv
 from crewai_tools import WebsiteSearchTool
 from crewai.types.usage_metrics import UsageMetrics
 #from langchain_core.agents import AgentAction, AgentFinish
-
+from ivcap_client import IVCAP
 from ivcap_tool import ivcap_tool_test
 from vectordb import create_vectordb_config
 
@@ -215,8 +215,14 @@ class TaskA(BaseModel):
 
 class CrewA(BaseModel):
     @classmethod
-    def from_aspect(cls, aspect_urn: str) -> 'CrewA':
-        content = load_ivcap_aspect(aspect_urn)
+    def from_aspect(cls, aspect_urn: str, ivcap:IVCAP) -> 'CrewA':
+        """Loads an aspect from crew"""
+        ivcap_aspects = list(ivcap.list_aspects(entity=aspect_urn, limit=1))
+        if ivcap_aspects:
+            aspect = ivcap_aspects[0]
+            content = aspect.content
+        else:
+            raise ValueError(f"Aspect not found. {aspect_urn}")
         content['verbose'] = False # should be set on execution
         agents = []
         for name, a in content.get("agents", {}).items():

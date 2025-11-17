@@ -49,6 +49,7 @@ from crewai_tools import DirectoryReadTool, DirectorySearchTool, FileReadTool, P
 
 from ivcap_service import getLogger, Service, JobContext
 from ivcap_ai_tool import start_tool_server, ToolOptions, ivcap_ai_tool, logging_init
+from ivcap_client import IVCAP
 
 from service_types import CrewA, TaskResponse, add_supported_tools
 from llm_factory import get_llm_factory
@@ -213,7 +214,7 @@ def get_auth_token(job_ctxt: JobContext) -> Optional[str]:
     return None
 
 
-def load_crew_definition(req: CrewRequest) -> CrewA:
+def load_crew_definition(req: CrewRequest, ivcap:IVCAP) -> CrewA:
     """
     Load crew definition from request.
     
@@ -227,7 +228,7 @@ def load_crew_definition(req: CrewRequest) -> CrewA:
         ValueError: If no crew definition provided
     """
     if req.crew_ref:
-        crew_def = CrewA.from_aspect(req.crew_ref)
+        crew_def = CrewA.from_aspect(req.crew_ref, ivcap)
     elif req.crew:
         crew_def = req.crew
     else:
@@ -342,11 +343,12 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         #     logger.info(f"✓ Set CREWAI_STORAGE_DIR for job isolation (no JWT)")
         
         # ==================== STEP 2: ARTIFACTS ====================
+        ivcap = jobCtxt.ivcap
         if req.artifact_urns:
             logger.info(f"Downloading {len(req.artifact_urns)} artifacts...")
             inputs_dir = artifact_mgr.download_artifacts(
                 req.artifact_urns,
-                jobCtxt.ivcap
+                ivcap
             )
             
             if inputs_dir:
@@ -379,7 +381,7 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         #     logger.info(f"Citation tracking enabled for job {jobCtxt.job_id}")
         
         # ==================== STEP 4: LOAD CREW ====================
-        crew_def = load_crew_definition(req)
+        crew_def = load_crew_definition(req, ivcap)
         logger.info(f"Loaded crew definition: {crew_def.name}")
         
         # Auto-inject appropriate search tools based on detected file types
@@ -614,7 +616,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--default-model',
         type=str,
-        default=os.getenv('LITELLM_DEFAULT_MODEL', 'gemini-2.5-flash'),
+        default=os.getenv('LITELLM_DEFAULT_MODEL', 'gpt-4.1'),
         help='Default LLM model'
     )
     args = parser.parse_args()
