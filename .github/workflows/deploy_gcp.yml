@@ -1,0 +1,30 @@
+name: Build & Deploy to GKE using Helm
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+
+jobs:
+  notify-gcloud-runner:
+    uses: science-digital/devops-central/.github/workflows/gcloud_runner.yml@main
+    secrets:
+      GCLOUD_ACCESS_SA: ${{ secrets.GCLOUD_ACCESS_SA }}
+      WORKFLOW_WEBHOOK_URL: ${{ secrets.WORKFLOW_WEBHOOK_URL }}
+      WORKFLOW_WEBHOOK_SECRET: ${{ secrets.WORKFLOW_WEBHOOK_SECRET }}
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+  build-and-register:
+    uses: science-digital/devops-central/.github/workflows/gcloud_build_register.yml@main
+    secrets:
+      DEVOPS_CENTRAL_READER_TOKEN: ${{ secrets.DEVOPS_CENTRAL_READER_TOKEN }}
+      M2M_AUTH0_CLIENT_SECRET_DEVELOP: ${{ secrets.M2M_AUTH0_CLIENT_SECRET_DEVELOP }}
+      M2M_AUTH0_CLIENT_SECRET_PROD: ${{ secrets.M2M_AUTH0_CLIENT_SECRET_PROD }}
+    with:
+      SERVICE_NAME: ivcap-crewai-service
+      DOCKER_FILE: Dockerfile
+      SERVICE_JSON_FILE: ./deploy/service.json

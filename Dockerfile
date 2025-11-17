@@ -19,7 +19,7 @@ RUN poetry config virtualenvs.create false && poetry install --no-root
 # RUN pip install -r requirements-dev.txt --force-reinstall
 
 # Get service files
-ADD service.py ivcap_tool.py service_types.py vectordb.py events.py logging.json no_posthog.py ./
+ADD service.py ivcap_tool.py service_types.py vectordb.py events.py logging.json no_posthog.py utils.py ./
 
 # So we can run it with --user
 RUN mkdir /data && chmod 777 /data
@@ -32,9 +32,10 @@ ARG VERSION ???
 ENV VERSION=$VERSION
 
 # ALERT!!! Should NOT copy keys into docker container
-ADD .env .
+# ADD .env .
 
 # Command to run
 ENV CREWAI_STORAGE_DIR=/data
+ENV OPENAI_API_KEY=dummy_key
 
 ENTRYPOINT ["python", "/app/service.py", "--port", "80"]

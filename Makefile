@@ -108,7 +108,8 @@ docker-run: #docker-build
 		--platform=linux/${TARGET_ARCH} \
 		--rm \
 		${DOCKER_NAME}_${TARGET_ARCH}:${DOCKER_VERSION} --port ${PORT}
-
+sbom:
+	poetry run cyclonedx-py environment -o sbom.json
 
 FORCE: run
 .PHONY: run
