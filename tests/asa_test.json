@@ -1,0 +1,11 @@
+{
+  "$schema": "urn:sd-core:schema.crewai.request.1",
+  "name": "ASA - Synthetic Biology Research Workflow",
+  "crew-ref": "urn:sd:crewai:crew.asa",
+  "inputs": {
+    "research_topic": "Engineered Bacteria for Plastic Biodegradation",
+    "keywords": "plastic degradation, PETase, MHETase, enzyme engineering, metabolic pathway design, synthetic biology, genetic circuits, biocontainment, directed evolution, protein engineering",
+    "additional_information": "Background context: Recent discoveries show certain bacteria can naturally degrade PET plastics, but rates are too slow for practical application. Our preliminary work identified promising PETase variants with 3x improved activity. Research objectives: (1) Engineer bacterial chassis (E. coli or Pseudomonas) with optimized PET degradation pathway, (2) Enhance enzyme stability and activity through directed evolution, (3) Design metabolic pathways to convert PET breakdown products into valuable chemicals, (4) Implement biocontainment systems for environmental safety. Constraints: Must demonstrate >10x degradation rate improvement, survive in ambient conditions (15-35°C), process mixed plastic waste, include kill switches for biocontainment. Available resources: Access to molecular biology lab, protein engineering facility, HPLC/GC-MS for product analysis. Timeline: 2-year project. Generate comprehensive research workflow with testable hypotheses, experimental protocols, statistical analysis plans, and feasibility assessment."
+  }
+}
+

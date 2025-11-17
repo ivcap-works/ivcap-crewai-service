@@ -1,0 +1,11 @@
+{
+  "$schema": "urn:sd-core:schema.crewai.request.1",
+  "name": "Funding Finder - AI Safety Alignment Research",
+  "crew-ref": "urn:sd:crewai:crew.funding_finder",
+  "inputs": {
+    "research_topic": "AI Safety and Alignment Research for Large Language Models",
+    "keywords": "constitutional AI, scalable oversight, interpretability, value alignment, mechanistic interpretability, AI safety evaluation frameworks, reward modeling, adversarial robustness",
+    "additional_information": "Project details: 3-year research program on developing scalable oversight mechanisms for superhuman AI systems. Team: 5 researchers (2 senior, 3 postdocs), affiliation with US university. Geographic scope: Open to funding from US (NSF, DARPA, private foundations), EU (ERC, Horizon Europe), UK (UKRI), Australia (ARC). Budget requirement: $1.5M-$3M total. Project stage: Preliminary results from pilot study available. Collaboration: Open to international partnerships. Deliverables: Open-source evaluation tools, peer-reviewed publications, policy recommendations. Timeline: Seeking funding for projects starting Q3 2025 or Q1 2026."
+  }
+}
+

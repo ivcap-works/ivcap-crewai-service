@@ -1,0 +1,11 @@
+{
+  "$schema": "urn:sd-core:schema.crewai.request.1",
+  "name": "Creativity Enhancement - Sustainable Packaging Materials",
+  "crew-ref": "urn:sd:crewai:crew.creativity_enhancement",
+  "inputs": {
+    "research_topic": "Biodegradable Packaging Materials for Food Industry",
+    "keywords": "biodegradable, compostable, food-safe, barrier properties, shelf-life extension, cost-effective, scalable manufacturing",
+    "additional_information": "Creative constraints: Must decompose within 90 days, maintain food safety standards, compete with plastic pricing within 20%, suitable for both dry and moist foods, compatible with existing packaging machinery. Creative stimuli: Consider biomimicry (lotus leaf water resistance, spider silk strength), traditional materials (beeswax, tree bark), emerging technologies (mycelium composites, algae-based films), and unexpected combinations (agricultural waste + nano-coatings). Target: Generate 10-15 novel material concepts that challenge conventional packaging paradigms."
+  }
+}
+

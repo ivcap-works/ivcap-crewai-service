@@ -1,0 +1,11 @@
+{
+  "$schema": "urn:sd-core:schema.crewai.request.1",
+  "name": "Patent Search - mRNA Delivery Systems",
+  "crew-ref": "urn:sd:crewai:crew.patent_search",
+  "inputs": {
+    "research_topic": "Lipid Nanoparticle Systems for mRNA Therapeutic Delivery",
+    "keywords": "lipid nanoparticles (LNP), mRNA delivery, ionizable lipids, PEGylated lipids, targeting ligands, intracellular delivery, endosomal escape, organ-specific delivery, stability formulations, cryopreservation",
+    "additional_information": "Patent search context: Biotech company developing next-generation LNP formulations for targeted mRNA delivery to liver and spleen. Need comprehensive patent landscape analysis for freedom-to-operate assessment before clinical development. Search scope: (1) LNP composition and formulation patents (ionizable lipids, helper lipids, cholesterol ratios, PEG-lipid modifications), (2) Targeting moiety patents (GalNAc conjugates, antibody fragments, peptide ligands for organ-specific delivery), (3) Manufacturing process patents (microfluidic mixing, ethanol injection, controlled particle size), (4) Stability and formulation patents (lyophilization, cryoprotectants, shelf-stable formulations). Key patent holders to analyze: Moderna, BioNTech/Pfizer, Acuitas Therapeutics, Arcturus Therapeutics, Translate Bio (now Sanofi). Time period: Focus on patents from 2015-2025. Geographic scope: US, EU, China patents. Identify: Blocking patents, patent clusters by technology area, expiration dates, licensing opportunities, white space for innovation, key claims that define freedom-to-operate, potential design-around strategies."
+  }
+}
+

@@ -1,0 +1,11 @@
+{
+  "$schema": "urn:sd-core:schema.crewai.request.1",
+  "name": "Expert Finder - Climate Modeling Specialists",
+  "crew-ref": "urn:sd:crewai:crew.expert_finder",
+  "inputs": {
+    "research_topic": "Regional Climate Modeling and Extreme Weather Prediction",
+    "keywords": "regional climate models, downscaling techniques, extreme weather events, climate attribution, ensemble forecasting, machine learning for climate, CMIP6 models, statistical downscaling, dynamical downscaling, heatwave prediction, flood forecasting",
+    "additional_information": "Search criteria: Government research institute needs to recruit 2-3 senior climate scientists for new regional climate prediction center. Required qualifications: PhD in atmospheric science, climate science, or related field; 10+ years experience with regional climate models (WRF, RegCM, or similar); expertise in extreme weather event attribution; track record of operational forecasting systems; strong publication record (>30 papers, h-index >25); experience with stakeholder engagement and policy translation. Preferred: Machine learning/AI experience for climate applications, familiarity with Australian or Asian-Pacific climate systems, grant funding track record >$5M, leadership experience managing research teams. Timeline: Position starts in 6 months. Identify 20-30 potential candidates, enrich profiles for top 10-15, rank top 5-7 with detailed engagement strategies and salary expectations."
+  }
+}
+

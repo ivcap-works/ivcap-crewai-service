@@ -1,0 +1,11 @@
+{
+  "$schema": "urn:sd-core:schema.crewai.request.1",
+  "name": "Risk Analysis - Phase II Clinical Trial Planning",
+  "crew-ref": "urn:sd:crewai:crew.risk_analysis",
+  "inputs": {
+    "research_topic": "Phase II Clinical Trial for Novel Alzheimer's Disease Therapeutic",
+    "keywords": "clinical trial risks, regulatory compliance, patient safety, trial design, statistical power, enrollment challenges, drug toxicity, FDA requirements, GCP compliance, data integrity",
+    "additional_information": "Project context: Planning Phase II randomized, double-blind, placebo-controlled trial for small molecule targeting neuroinflammation in early-stage Alzheimer's disease. Trial parameters: 120 patients, 18-month duration, primary endpoint cognitive decline (ADAS-Cog), secondary endpoints biomarker changes (CSF tau/Aβ42, PET amyloid, MRI volumetrics). Existing risk factors: (1) Phase I safety data limited to 40 patients, one serious adverse event (transient hepatotoxicity), (2) Competitive landscape with 3 similar trials ongoing, (3) COVID-19 impact on enrollment and retention, (4) Site capacity constraints - only 8 qualified centers identified, (5) Biomarker assay variability across sites, (6) High dropout rate expected in AD trials (25-30%). Analyze risks across: Technical (trial design, endpoints, statistical power), Operational (enrollment, retention, site management, data quality), Financial (budget overruns, timeline delays), Regulatory (FDA feedback, protocol amendments, safety monitoring), Strategic (competitive trials, IP landscape, commercial viability). Develop comprehensive mitigation strategies with monitoring KPIs, contingency plans, and decision trees for go/no-go milestones."
+  }
+}
+

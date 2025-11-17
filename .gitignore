@@ -15,3 +15,5 @@ __service.json
 runs
 docs_context/*
 examples/litellm_*.log
+test_results_*
+.gitignore

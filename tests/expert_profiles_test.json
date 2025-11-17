@@ -1,0 +1,11 @@
+{
+  "$schema": "urn:sd-core:schema.crewai.request.1",
+  "name": "Expert Profiles - Quantum Computing Researchers",
+  "crew-ref": "urn:sd:crewai:crew.expert_profiles",
+  "inputs": {
+    "research_topic": "Quantum Computing Hardware and Error Correction",
+    "keywords": "superconducting qubits, topological qubits, quantum error correction, surface codes, fault-tolerant quantum computing, quantum hardware architecture, cryogenic systems, quantum control systems",
+    "additional_information": "Profile requirements: Seeking experts for advisory board of quantum computing startup. Need 15-25 candidates initially, then detailed profiles for top 10-12. Criteria: Published >10 papers in quantum hardware/error correction in last 5 years, h-index >20, active in quantum computing community, experience with both theoretical and experimental aspects, preferably with industry or startup experience. Geographic preference: US, EU, Canada, Australia. Exclude candidates currently at direct competitors (IBM Quantum, Google Quantum AI, IonQ, Rigetti). Must assess: Recent publications, citation impact, funding track record, industry collaborations, conference presence, open-source contributions. Goal: Identify top 3-5 experts for board invitation with detailed engagement strategies."
+  }
+}
+

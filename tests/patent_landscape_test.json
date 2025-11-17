@@ -1,0 +1,11 @@
+{
+  "$schema": "urn:sd-core:schema.crewai.request.1",
+  "name": "Patent Landscape - CAR-T Cell Therapy Regulatory Analysis",
+  "crew-ref": "urn:sd:crewai:crew.patent_landscape",
+  "inputs": {
+    "research_topic": "CAR-T Cell Therapy for Solid Tumors",
+    "keywords": "CAR-T cells, solid tumors, tumor microenvironment, antigen targeting, persistence, trafficking, safety switches, allogeneic CAR-T, next-generation CAR designs, armored CAR-T",
+    "additional_information": "Analysis scope: Comprehensive patent and regulatory landscape for CAR-T therapies targeting solid tumors (vs hematologic malignancies where field is more mature). Patent focus: (1) Novel CAR constructs (dual-targeting, logic-gated, switchable CARs), (2) Strategies to overcome solid tumor barriers (chemokine receptors, matrix degrading enzymes, checkpoint inhibitor secretion), (3) Safety mechanisms (suicide genes, elimination switches, transient expression systems), (4) Manufacturing innovations (allogeneic approaches, iPSC-derived, automation), (5) Combination strategies (with oncolytic viruses, checkpoint inhibitors, radiation). Regulatory scope: Analyze regulatory pathways and approvals across FDA (US), EMA (Europe), TGA (Australia), PMDA (Japan), NMPA (China) for CAR-T products 2017-2025. Include: Approved products, clinical hold reasons, accelerated approval criteria, post-market surveillance requirements, manufacturing standards, patient selection criteria. Patent horizon: Top 30 patent families from 2015-2025. Generate: Patent landscape map by technology cluster, regulatory timeline and requirements by jurisdiction, freedom-to-operate analysis, white space opportunities, strategic recommendations for R&D and regulatory strategy."
+  }
+}
+

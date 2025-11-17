@@ -1,0 +1,11 @@
+{
+  "$schema": "urn:sd-core:schema.crewai.request.1",
+  "name": "Competitive Analysis - Enterprise LLM Platform Market",
+  "crew-ref": "urn:sd:crewai:crew.competitive_analysis",
+  "inputs": {
+    "research_topic": "Enterprise Large Language Model Deployment Platforms",
+    "keywords": "enterprise LLM, model deployment, API management, fine-tuning platforms, RAG systems, prompt engineering, LLM observability, cost optimization, multi-model orchestration, security and compliance",
+    "additional_information": "Competitive landscape analysis for enterprise LLM platform startup. Key competitors to analyze: (1) OpenAI Enterprise - API platform, fine-tuning, GPT models, (2) Anthropic Claude for Enterprise - Claude models, longer context, safety focus, (3) Google Vertex AI - Model Garden, PaLM API, enterprise integration, (4) Azure OpenAI Service - Microsoft enterprise integration, compliance certifications, (5) Amazon Bedrock - Multi-model access, AWS integration. Analysis dimensions: Product features (model selection, fine-tuning capabilities, RAG/vector DB integration, prompt management, evaluation tools), Pricing models (token-based, subscription tiers, enterprise contracts), Market positioning (security/compliance focus, developer experience, enterprise features, industry-specific solutions), Technical capabilities (latency, throughput, context windows, customization options), Go-to-market strategy (target industries, partnership ecosystem, sales motion). Conduct SWOT analysis for each competitor. Synthesize: Market positioning opportunities, feature gaps we can exploit, pricing strategy recommendations, differentiation strategies, partnership opportunities, threats from new entrants (Cohere, AI21, Mistral). Budget: Competitive intelligence within $50k for market entry decision."
+  }
+}
+
