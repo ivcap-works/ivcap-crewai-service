@@ -172,6 +172,40 @@ add_supported_tools({
 # HELPER FUNCTIONS
 # ============================================================================
 
+def crew_wants_artifact_tools(crew_def) -> bool:
+    """
+    Check if crew intends to use tools for artifact access.
+    
+    Returns True if:
+    - ANY agent has DirectoryReadTool already defined
+    - FIRST agent has "research" or "search" in their goal (case-insensitive)
+    
+    Returns False otherwise (crew will use knowledge sources instead)
+    
+    Args:
+        crew_def: CrewA specification object
+    
+    Returns:
+        bool: True if crew should use tools, False if should use knowledge sources
+    """
+    for agent in crew_def.agents:
+        # Check for DirectoryReadTool in any agent
+        has_directory_tool = any(
+            t.id in ["builtin:DirectoryReadTool", "urn:sd-core:crewai.builtin.directoryReadTool"]
+            for t in agent.tools
+        )
+        if has_directory_tool:
+            return True
+    
+    # Check goal for research/search keywords ONLY in first agent
+    if crew_def.agents:
+        first_agent = crew_def.agents[0]
+        goal_lower = first_agent.goal.lower()
+        if "research" in goal_lower or "search" in goal_lower:
+            return True
+    
+    return False
+
 def get_auth_token(job_ctxt: JobContext) -> Optional[str]:
     """
     Extract JWT token from JobContext.
@@ -390,7 +424,8 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         crew_def = load_crew_definition(req, ivcap)
         logger.info(f"Loaded crew definition: {crew_def.name}")
         
-        # Auto-inject appropriate search tools based on detected file types
+        # ==================== STEP 4.5: SMART ARTIFACT HANDLING ====================
+        artifact_knowledge_sources = []
         if req.artifact_urns and inputs_dir:
             from service_types import ToolA
             
@@ -398,50 +433,86 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
             pdf_files = list(inputs_path.glob("*.pdf"))
             text_files = list(inputs_path.glob("*.txt")) + list(inputs_path.glob("*.md")) + list(inputs_path.glob("*.csv"))
             
-            # Inject PDFSearchTool if PDFs detected
-            if pdf_files:
-                pdf_tool = ToolA(
-                    id="urn:sd-core:crewai.builtin.pdfSearchTool",
-                    name="PDFSearchTool",
-                    description="Semantic search within PDF documents using RAG/embeddings"
-                )
-                
-                # Add PDFSearchTool to all agents that have DirectoryReadTool
-                for agent in crew_def.agents:
-                    has_directory_read = any(
-                        t.id in ["builtin:DirectoryReadTool", "urn:sd-core:crewai.builtin.directoryReadTool"] 
-                        for t in agent.tools
-                    )
-                    has_pdf_search = any(
-                        t.id in ["builtin:PDFSearchTool", "urn:sd-core:crewai.builtin.pdfSearchTool"] 
-                        for t in agent.tools
-                    )
-                    
-                    if has_directory_read and not has_pdf_search:
-                        agent.tools.append(pdf_tool)
-                        logger.info(f"→ Auto-injected PDFSearchTool into agent '{agent.name}' for {len(pdf_files)} PDF(s)")
+            # Decide: tools or knowledge sources?
+            use_tools = crew_wants_artifact_tools(crew_def)
             
-            # Inject DirectorySearchTool if text files detected
-            if text_files:
-                text_tool = ToolA(
-                    id="urn:sd-core:crewai.builtin.directorySearchTool",
-                    name="DirectorySearchTool",
-                    description="Semantic search across text-based files using RAG/embeddings"
-                )
+            if use_tools:
+                logger.info("🔧 Crew has DirectoryReadTool or research/search agents - using tool injection")
                 
+                # Identify agents that should get tools (have DirectoryReadTool OR research/search in role/goal)
+                agents_needing_tools = []
                 for agent in crew_def.agents:
                     has_directory_read = any(
                         t.id in ["builtin:DirectoryReadTool", "urn:sd-core:crewai.builtin.directoryReadTool"] 
                         for t in agent.tools
                     )
-                    has_dir_search = any(
-                        t.id in ["builtin:DirectorySearchTool", "urn:sd-core:crewai.builtin.directorySearchTool"] 
+                    role_lower = agent.role.lower()
+                    goal_lower = agent.goal.lower()
+                    has_research_goal = "research" in role_lower or "search" in role_lower or "research" in goal_lower or "search" in goal_lower
+                    
+                    if has_directory_read or has_research_goal:
+                        agents_needing_tools.append(agent)
+                        logger.info(f"  Agent '{agent.name}' qualified for tool injection (has_directory_read={has_directory_read}, has_research_goal={has_research_goal})")
+                
+                if not agents_needing_tools:
+                    logger.warning("⚠ Tool mode detected but no agents qualified for tool injection")
+                
+                # Inject tools into qualified agents
+                for agent in agents_needing_tools:
+                    has_directory_read = any(
+                        t.id in ["builtin:DirectoryReadTool", "urn:sd-core:crewai.builtin.directoryReadTool"] 
                         for t in agent.tools
                     )
                     
-                    if has_directory_read and not has_dir_search:
-                        agent.tools.append(text_tool)
-                        logger.info(f"→ Auto-injected DirectorySearchTool into agent '{agent.name}' for {len(text_files)} text file(s)")
+                    # Inject DirectoryReadTool if not present
+                    if not has_directory_read:
+                        dir_tool = ToolA(
+                            id="urn:sd-core:crewai.builtin.directoryReadTool",
+                            name="DirectoryReadTool",
+                            description="Lists all files in the inputs directory"
+                        )
+                        agent.tools.append(dir_tool)
+                        logger.info(f"  → Auto-injected DirectoryReadTool into agent '{agent.name}'")
+                    
+                    # Inject PDFSearchTool if PDFs detected
+                    if pdf_files:
+                        has_pdf_search = any(
+                            t.id in ["builtin:PDFSearchTool", "urn:sd-core:crewai.builtin.pdfSearchTool"] 
+                            for t in agent.tools
+                        )
+                        if not has_pdf_search:
+                            pdf_tool = ToolA(
+                                id="urn:sd-core:crewai.builtin.pdfSearchTool",
+                                name="PDFSearchTool",
+                                description="Semantic search within PDF documents using RAG/embeddings"
+                            )
+                            agent.tools.append(pdf_tool)
+                            logger.info(f"  → Auto-injected PDFSearchTool into agent '{agent.name}'")
+                    
+                    # Inject DirectorySearchTool if text files detected
+                    if text_files:
+                        has_dir_search = any(
+                            t.id in ["builtin:DirectorySearchTool", "urn:sd-core:crewai.builtin.directorySearchTool"] 
+                            for t in agent.tools
+                        )
+                        if not has_dir_search:
+                            text_tool = ToolA(
+                                id="urn:sd-core:crewai.builtin.directorySearchTool",
+                                name="DirectorySearchTool",
+                                description="Semantic search across text-based files using RAG/embeddings"
+                            )
+                            agent.tools.append(text_tool)
+                            logger.info(f"  → Auto-injected DirectorySearchTool into agent '{agent.name}'")
+            
+            else:
+                logger.info("📚 Crew has no DirectoryReadTool or research/search agents - using knowledge sources")
+                from knowledge_processor import create_knowledge_sources_from_artifacts
+                try:
+                    artifact_knowledge_sources = create_knowledge_sources_from_artifacts(inputs_dir)
+                    logger.info(f"✓ Created {len(artifact_knowledge_sources)} artifact knowledge sources")
+                    logger.info("  All agents will have automatic RAG access to artifacts")
+                except Exception as e:
+                    logger.error(f"Failed to create artifact knowledge sources: {e}", exc_info=True)
         
         # ==================== STEP 5: CREATE LLM ====================
         llm, planning_llm, embedder_config, litellm_proxy_url = create_authenticated_llm(jwt_token, req.inputs)
@@ -470,22 +541,30 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
             os.environ["OPENAI_API_BASE"] = litellm_proxy_url
             logger.info(f"✓ Set OpenAI environment for tool compatibility")
         
-        # ==================== STEP 6: PROCESS ADDITIONAL INPUTS AS KNOWLEDGE ====================
+        # ==================== STEP 6: PROCESS KNOWLEDGE SOURCES ====================
         knowledge_sources = []
+        
+        # Add artifact knowledge sources (if using knowledge source mode)
+        if artifact_knowledge_sources:
+            knowledge_sources.extend(artifact_knowledge_sources)
+        
+        # Process additional-inputs (previous crew outputs)
         if req.additional_inputs:
             logger.info("📚 Processing additional inputs as knowledge sources...")
             from knowledge_processor import create_knowledge_sources_from_inputs
             try:
-                knowledge_sources = create_knowledge_sources_from_inputs(req.additional_inputs)
-                logger.info(f"✓ Created {len(knowledge_sources)} knowledge source(s) for crew")
-                if knowledge_sources and embedder_config:
-                    logger.info("  Knowledge sources will use JWT-authenticated embedder")
-                elif knowledge_sources and not embedder_config:
-                    logger.warning("  ⚠ Knowledge sources without embedder - may use default OpenAI")
+                additional_sources = create_knowledge_sources_from_inputs(req.additional_inputs)
+                knowledge_sources.extend(additional_sources)
+                logger.info(f"✓ Created {len(additional_sources)} knowledge sources from additional inputs")
             except Exception as e:
                 logger.error(f"Failed to process additional inputs: {e}", exc_info=True)
-                logger.warning("Continuing without knowledge sources")
-                knowledge_sources = []
+        
+        if knowledge_sources:
+            logger.info(f"📚 Total knowledge sources for crew: {len(knowledge_sources)}")
+            if embedder_config:
+                logger.info("  Knowledge sources will use JWT-authenticated embedder")
+            else:
+                logger.warning("  ⚠ Knowledge sources without embedder - may use default OpenAI")
         
         # ==================== STEP 7: BUILD CREW ====================
         # CrewBuilder handles task context resolution!
