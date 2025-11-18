@@ -1,3 +1,14 @@
+"""
+Service Type Definitions for IVCAP CrewAI Service
+Defines Pydantic models for crew specifications, agents, tasks, and tools
+
+Updated: Added tool filtering logic to gracefully handle missing artifacts
+Changes:
+- Added tool filtering in as_crew_agent() to skip artifact-dependent tools when no inputs_dir
+- Tools that require artifacts are silently filtered when artifacts are not provided
+- Prevents None tool values that would cause agent creation to fail
+"""
+
 from contextlib import redirect_stdout
 from dataclasses import dataclass
 import datetime
@@ -136,10 +147,44 @@ class AgentA(BaseModel):
         Create Agent with optional custom LLM.
         
         Updated: Supports per-agent custom LLM models via llm_factory
+        Updated: Added tool filtering to skip artifact-dependent tools when no artifacts provided
         """
         try:
             d = self.model_dump(mode='python')
-            d['tools'] = [t.as_crew_tool(ctxt) for t in self.tools]
+            
+            # Filter tools - skip artifact-dependent tools when no inputs_dir available
+            artifact_dependent_tools = {
+                "builtin:DirectoryReadTool",
+                "urn:sd-core:crewai.builtin.directoryReadTool",
+                "builtin:DirectorySearchTool", 
+                "urn:sd-core:crewai.builtin.directorySearchTool",
+                "builtin:PDFSearchTool",
+                "urn:sd-core:crewai.builtin.pdfSearchTool",
+                "builtin:FileReadTool",
+                "urn:sd-core:crewai.builtin.fileReadTool",
+            }
+            
+            tools = []
+            for t in self.tools:
+                # Skip artifact-dependent tools when no inputs_dir available
+                if t.id in artifact_dependent_tools and not ctxt.inputs_dir:
+                    import logging
+                    logging.getLogger("app.crew_builder").info(
+                        f"Skipping tool {t.name} for agent {self.name} - no artifacts provided"
+                    )
+                    continue
+                
+                try:
+                    tool = t.as_crew_tool(ctxt)
+                    tools.append(tool)
+                except Exception as e:
+                    import logging
+                    logging.getLogger("app.crew_builder").error(
+                        f"Failed to initialize tool {t.name} for agent {self.name}: {e}"
+                    )
+                    raise
+            
+            d['tools'] = tools
             
             # Per-agent custom LLM
             if self.llm and ctxt.llm_factory and ctxt.jwt_token:

@@ -7,6 +7,7 @@ Changes:
 - New file - manages artifact lifecycle with job isolation
 - Added MIME type to file extension mapping for proper file naming
 - Added automatic extension detection from artifact metadata
+- Fixed artifact download to use as_file() instead of non-existent as_local_file() method
 """
 
 from pathlib import Path
@@ -195,19 +196,15 @@ class ArtifactManager:
                     logger.info(f"  Saving as: {safe_name}")
                     
                     file_path = self.inputs_dir / safe_name
-                    local_artifact = artifact.as_local_file()
-                    try:
-                        shutil.copy2(local_artifact, file_path)
-                    except Exception as exp:
-                        logger.exception("Error when copying files %s", exp)
-                    # Write artifact content
-                    # with open(file_path, 'wb') as f:
-                    #     content = artifact.as_file()
-                    #     # Handle both file-like objects and bytes
-                    #     if hasattr(content, 'read'):
-                    #         f.write(content.read())
-                    #     else:
-                    #         f.write(content)
+                    
+                    # Write artifact content using as_file() method
+                    with open(file_path, 'wb') as f:
+                        content = artifact.as_file()
+                        # Handle both file-like objects and bytes
+                        if hasattr(content, 'read'):
+                            f.write(content.read())
+                        else:
+                            f.write(content)
                     
                     logger.info(f"Downloaded {urn} → {file_path}")
                     downloaded_count += 1

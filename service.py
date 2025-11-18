@@ -2,7 +2,7 @@
 IVCAP CrewAI Service
 Executes CrewAI crews with artifact support and JWT authentication
 
-Updated: Added knowledge sources support for previous crew outputs
+Updated: Fixed tool initialization to prevent None values and added artifact download validation
 Changes:
 - Added ArtifactManager for artifact lifecycle
 - Added JWT token extraction (4-path fallback with job_authorization)
@@ -24,6 +24,8 @@ Changes:
 - Added knowledge_sources support: previous crew outputs → StringKnowledgeSource → crew-level knowledge
 - Fixed Path import shadowing issue (removed duplicate local imports)
 - Fixed PDFSearchTool/DirectorySearchTool auto-injection to use correct URN format (lowercase first char)
+- Fixed tool factories to never return None (always return valid tool instances with fallbacks)
+- Added fail-fast validation: raises RuntimeError when artifact download fails
 """
 
 import datetime
@@ -143,23 +145,22 @@ add_supported_tools({
     # DirectoryReadTool - requires inputs_dir (lists files, not semantic search)
     "urn:sd-core:crewai.builtin.directoryReadTool": 
         lambda _, ctxt: DirectoryReadTool(directory=ctxt.inputs_dir) 
-        if ctxt.inputs_dir else None,
+        if ctxt.inputs_dir else DirectoryReadTool(directory="."),
     
     # DirectorySearchTool - requires inputs_dir (inherits embedder from Crew)
     "urn:sd-core:crewai.builtin.directorySearchTool": 
         lambda _, ctxt: DirectorySearchTool(
-            directory=ctxt.inputs_dir
+            directory=ctxt.inputs_dir or "."
             # NO config needed - uses Crew's embedder automatically!
-        ) if ctxt.inputs_dir else None,
+        ),
     
     # PDFSearchTool - for semantic search within PDF documents (inherits embedder from Crew)
     "urn:sd-core:crewai.builtin.pdfSearchTool": 
-        lambda _, ctxt: PDFSearchTool() if ctxt.inputs_dir else None,
+        lambda _, ctxt: PDFSearchTool(),
     
-    # FileReadTool - requires inputs_dir
+    # FileReadTool - requires inputs_dir for base path
     "urn:sd-core:crewai.builtin.fileReadTool":
-        lambda _, ctxt: FileReadTool(file_path=ctxt.inputs_dir)
-        if ctxt.inputs_dir else None,
+        lambda _, ctxt: FileReadTool(file_path=ctxt.inputs_dir or "."),
     
     # WebsiteSearchTool - semantic search with vector embeddings
     "urn:sd-core:crewai.builtin.websiteSearchTool":
@@ -372,7 +373,12 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
                 if not pdf_files and not text_files:
                     logger.warning("⚠ No recognized file types (PDF/TXT/MD/CSV) - DirectoryReadTool can list files")
             else:
-                logger.warning("Artifact download failed, continuing without artifacts")
+                logger.error("Artifact download failed")
+                raise RuntimeError(
+                    f"Failed to download {len(req.artifact_urns)} artifact(s). "
+                    f"Cannot proceed as crew may depend on these files. "
+                    f"Check artifact URNs and permissions."
+                )
         
         # ==================== STEP 3: CITATIONS (optional - not implemented) ====================
         # Citation tracking is prepared but not enabled in this version
