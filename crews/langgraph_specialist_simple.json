@@ -1,0 +1,35 @@
+{
+  "$schema": "urn:sd-core:schema.crewai.request.1",
+  "name": "LangGraph Research Specialist (Simple)",
+  "inputs": {
+    "query": "What are the latest developments in biodegradable plastics and plastic-degrading enzymes?"
+  },
+  "crew": {
+    "agents": [
+      {
+        "name": "langgraph_specialist",
+        "role": "LangGraph-Powered Research Specialist",
+        "goal": "Execute deep research queries using the advanced LangGraph research agent",
+        "backstory": "You are a specialist agent whose sole purpose is to leverage the LangGraph research system. When given a research question, you invoke the deep research tool which handles all aspects of comprehensive web research including query generation, parallel searches, knowledge gap analysis, and citation tracking.",
+        "tools": [
+          {
+            "id": "urn:ivcap:langgraph:deep-research",
+            "opts": {}
+          }
+        ],
+        "allow_delegation": false,
+        "verbose": true
+      }
+    ],
+    "tasks": [
+      {
+        "name": "research",
+        "description": "Research the following question using the deep research tool: {query}",
+        "expected_output": "Comprehensive research report with citations and sources",
+        "agent": "langgraph_specialist"
+      }
+    ],
+    "verbose": true,
+    "process": "sequential"
+  }
+}

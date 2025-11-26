@@ -56,6 +56,7 @@ from ivcap_client import IVCAP
 from service_types import CrewA, TaskResponse, add_supported_tools
 from llm_factory import get_llm_factory
 from artifact_manager import ArtifactManager
+from ivcap_langgraph_tool import create_langgraph_tool
 
 # Initialize logging
 logging_init("./logging.json")
@@ -165,6 +166,12 @@ add_supported_tools({
     # WebsiteSearchTool - semantic search with vector embeddings
     "urn:sd-core:crewai.builtin.websiteSearchTool":
         lambda _, ctxt: WebsiteSearchTool(config=ctxt.vectordb_config),
+
+    # IVCAP LangGraph Deep Research Tool - comprehensive web research agent
+    "urn:ivcap:service:dcdc770b-d276-5df5-b5b7-babf17fa6eb7":
+        create_langgraph_tool,
+    "urn:ivcap:langgraph:deep-research":  # Alias for convenience
+        create_langgraph_tool,
 })
 
 
@@ -223,29 +230,43 @@ def get_auth_token(job_ctxt: JobContext) -> Optional[str]:
         JWT token string without "Bearer " prefix, or None
     """
     # Path 1: job_authorization attribute (ivcap-ai-tool v0.7.17+)
-    if hasattr(job_ctxt, 'job_authorization') and job_ctxt.job_authorization:
+    if hasattr(job_ctxt, 'job_authorization'):
         token = job_ctxt.job_authorization
-        # Remove "Bearer " prefix if present
-        if isinstance(token, str) and token.startswith('Bearer '):
-            return token[7:]
-        return token
+        logger.debug(f"Path 1 (job_authorization): token={repr(token)}, type={type(token)}, bool={bool(token)}")
+        if token:
+            # Remove "Bearer " prefix if present
+            if isinstance(token, str) and token.startswith('Bearer '):
+                logger.info(f"✓ JWT extracted from job_authorization (with Bearer prefix, length: {len(token)-7})")
+                return token[7:]
+            logger.info(f"✓ JWT extracted from job_authorization (length: {len(str(token))})")
+            return token
     
     # Path 2: Direct auth_token attribute (older versions)
-    if hasattr(job_ctxt, 'auth_token') and job_ctxt.auth_token:
-        return job_ctxt.auth_token
+    if hasattr(job_ctxt, 'auth_token'):
+        token = job_ctxt.auth_token
+        logger.debug(f"Path 2 (auth_token): token={repr(token)}, bool={bool(token)}")
+        if token:
+            logger.info(f"✓ JWT extracted from auth_token (length: {len(str(token))})")
+            return token
     
     # Path 3: Headers dict
     if hasattr(job_ctxt, 'headers'):
-        auth_header = job_ctxt.headers.get('Authorization', '')
+        headers = job_ctxt.headers if isinstance(job_ctxt.headers, dict) else {}
+        auth_header = headers.get('Authorization', '')
+        logger.debug(f"Path 3 (headers): Authorization={repr(auth_header)}")
         if auth_header.startswith('Bearer '):
+            logger.info(f"✓ JWT extracted from headers (length: {len(auth_header)-7})")
             return auth_header[7:]  # Strip "Bearer " prefix
     
     # Path 4: Nested request object
     if hasattr(job_ctxt, 'request') and hasattr(job_ctxt.request, 'headers'):
         auth_header = job_ctxt.request.headers.get('Authorization', '')
+        logger.debug(f"Path 4 (request.headers): Authorization={repr(auth_header)}")
         if auth_header.startswith('Bearer '):
+            logger.info(f"✓ JWT extracted from request.headers (length: {len(auth_header)-7})")
             return auth_header[7:]
     
+    logger.warning("✗ No JWT token found in any path (job_authorization, auth_token, headers, request.headers)")
     return None
 
 
@@ -364,18 +385,14 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
             if hasattr(jobCtxt.request, '__dict__'):
                 logger.debug(f"JobContext.request attributes: {list(jobCtxt.request.__dict__.keys())}")
         
-        # if jwt_token:
-        #     logger.info(f"✓ JWT token detected (length: {len(jwt_token)})")
-        #     # Set environment variable for IVCAP client to authenticate artifact downloads
-        #     # os.environ["IVCAP_JWT"] = jwt_token
-        #     # Set job-isolated CrewAI storage to prevent cross-contamination between runs
-        #     # os.environ["CREWAI_STORAGE_DIR"] = f"runs/{jobCtxt.job_id}"
-        #     logger.info(f"✓ Set CREWAI_STORAGE_DIR for complete job isolation")
-        # else:
-        #     logger.warning("✗ No JWT token found in JobContext")
-        #     # Still set job-isolated storage even without JWT
-        #     # os.environ["CREWAI_STORAGE_DIR"] = f"runs/{jobCtxt.job_id}"
-        #     logger.info(f"✓ Set CREWAI_STORAGE_DIR for job isolation (no JWT)")
+        if jwt_token:
+            logger.info(f"✓ JWT token detected for LLM authentication (length: {len(jwt_token)})")
+            os.environ["CREWAI_STORAGE_DIR"] = f"runs/{jobCtxt.job_id}"
+            logger.info(f"✓ Set CREWAI_STORAGE_DIR for complete job isolation")
+        else:
+            logger.warning("✗ No JWT token found - LLM calls will fall back to direct OpenAI API")
+            os.environ["CREWAI_STORAGE_DIR"] = f"runs/{jobCtxt.job_id}"
+            logger.info(f"✓ Set CREWAI_STORAGE_DIR for job isolation (no JWT)")
         
         # ==================== STEP 2: ARTIFACTS ====================
         ivcap = jobCtxt.ivcap

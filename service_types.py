@@ -118,10 +118,14 @@ class ToolA(BaseModel):
                 n = id.split(":")[1]
                 id = "urn:sd-core:crewai.builtin." + n[0].lower() + n[1:]
 
-            if id.startswith("urn:sd-core:crewai.builtin."):
-                t = supported_tools.get(id)
-            elif id.startswith("urn:ivcap:service:"):
+            # First check if tool is registered in supported_tools
+            t = supported_tools.get(id)
+
+            # If not found and it's an IVCAP service, try dynamic loading
+            if not t and id.startswith("urn:ivcap:service:"):
                 t = ivcap_tool_test(id, **self.opts)
+
+            # If still not found, raise error
             if not t:
                 raise ValueError(f"Unsupported tool '{id}'")
             tool = t(self, ctxt)

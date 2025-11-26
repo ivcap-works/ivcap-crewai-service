@@ -1,0 +1,69 @@
+{
+  "$schema": "urn:sd-core:schema.crewai.request.1",
+  "name": "Research Specialist with LangGraph",
+  "inputs": {
+    "research_topic": "recent advancements in quantum computing applications"
+  },
+  "crew": {
+    "agents": [
+      {
+        "name": "deep_researcher",
+        "role": "Deep Research Specialist",
+        "goal": "Perform comprehensive, multi-round web research with knowledge gap analysis and citation tracking using the LangGraph research agent",
+        "backstory": "You are a research specialist backed by a powerful LangGraph agent that performs iterative research. You excel at identifying knowledge gaps, generating diverse search queries, and synthesizing findings with proper citations. Your research is thorough, well-sourced, and comprehensive.",
+        "tools": [
+          {
+            "id": "urn:ivcap:langgraph:deep-research",
+            "name": "deep_research",
+            "opts": {
+              "initial_search_query_count": 5,
+              "max_research_loops": 3
+            }
+          }
+        ],
+        "allow_delegation": false,
+        "verbose": true
+      },
+      {
+        "name": "analyst",
+        "role": "Research Analyst",
+        "goal": "Analyze and structure research findings into key insights and themes",
+        "backstory": "You are an expert at taking raw research data and identifying patterns, trends, and key insights. You organize information logically and highlight the most important findings.",
+        "allow_delegation": false
+      },
+      {
+        "name": "technical_writer",
+        "role": "Technical Content Writer",
+        "goal": "Transform research insights into clear, accessible technical content",
+        "backstory": "You specialize in making complex technical topics understandable without losing accuracy. You write engaging content that educates while maintaining technical rigor. You always include proper citations and references.",
+        "allow_delegation": false
+      }
+    ],
+    "tasks": [
+      {
+        "name": "deep_research_task",
+        "description": "Use the LangGraph deep research tool to conduct comprehensive research on: {research_topic}. The tool will automatically:\n1. Generate diverse search queries\n2. Perform parallel web searches\n3. Analyze results for knowledge gaps\n4. Conduct additional research rounds as needed\n5. Synthesize findings with citations\n\nProvide the complete research report with all citations.",
+        "expected_output": "Comprehensive research report with properly cited sources, covering all aspects of {research_topic}. Include key findings, recent developments, and relevant citations.",
+        "agent": "deep_researcher"
+      },
+      {
+        "name": "analysis_task",
+        "description": "Analyze the research findings from the deep research task. Identify:\n1. Main themes and patterns\n2. Key breakthrough developments\n3. Important trends and trajectories\n4. Gaps or areas needing further investigation\n5. Practical applications and implications\n\nOrganize findings into a structured analysis.",
+        "expected_output": "Structured analysis with 5-7 key themes, each with supporting evidence from the research. Include bullet points for easy scanning.",
+        "agent": "analyst",
+        "context": ["deep_research_task"]
+      },
+      {
+        "name": "content_creation_task",
+        "description": "Create a comprehensive technical article based on the research and analysis. The article should:\n1. Have a clear introduction explaining the topic\n2. Present key findings in logical sections\n3. Include technical details while remaining accessible\n4. Highlight practical implications\n5. Conclude with future outlook\n6. Include all relevant citations from the research\n\nMake it engaging for a technical audience.",
+        "expected_output": "A well-structured technical article of 800-1200 words with proper sections, citations, and a bibliography. The article should be informative, accurate, and engaging.",
+        "agent": "technical_writer",
+        "context": ["deep_research_task", "analysis_task"]
+      }
+    ],
+    "verbose": true,
+    "process": "sequential",
+    "memory": false,
+    "planning": false
+  }
+}
