@@ -6,12 +6,14 @@ Updated:
 - Removed embedchain dependency for CrewAI 1.3.0 compatibility
 - Fixed provider name from "chroma" to "chromadb" to match CrewAI validation requirements
 """
-
+import os
 from pathlib import Path
 import chromadb
+from chromadb.config import Settings
+from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
 
 
-def create_vectordb_config(job_id: str) -> dict:
+def create_vectordb_config(job_id: str, jwt_token) -> dict:
     """
     Create vectordb configuration for CrewAI tools.
     
@@ -29,14 +31,15 @@ def create_vectordb_config(job_id: str) -> dict:
     
     # Create ChromaDB client with persistent storage
     client = chromadb.PersistentClient(path=str(persist_dir))
-    
+    embedding_function = OpenAIEmbeddingFunction(api_key=jwt_token, model_name="text-embedding-3-small", api_base=os.getenv("OPENAI_BASE_URL"))
     # Return config format expected by crewai-tools
     config = {
         "vectordb": {
             "provider": "chromadb",
             "config": {
                 "client": client,
-                "collection_name": f"crew_{job_id}"
+                "collection_name": f"crew_{job_id}",
+                "config": {"embedding_function": embedding_function}
             }
         }
     }

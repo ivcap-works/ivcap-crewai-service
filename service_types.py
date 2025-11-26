@@ -336,7 +336,7 @@ class CrewA(BaseModel):
         
         # Build context
         ctxt = Context(
-            vectordb_config=create_vectordb_config(job_id),
+            vectordb_config=create_vectordb_config(job_id, jwt_token),
             job_id=job_id,
             inputs_dir=inputs_dir,
             jwt_token=jwt_token,
