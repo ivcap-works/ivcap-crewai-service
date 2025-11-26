@@ -19,7 +19,8 @@ RUN poetry config virtualenvs.create false && poetry install --no-root
 # RUN pip install -r requirements-dev.txt --force-reinstall
 
 # Get service files
-ADD service.py ivcap_tool.py service_types.py vectordb.py events.py logging.json no_posthog.py utils.py llm_factory.py artifact_manager.py crew_builder.py ./
+ADD service.py ivcap_tool.py service_types.py vectordb.py events.py logging.json utils.py llm_factory.py artifact_manager.py crew_builder.py ./
+ADD ivcap_langgraph_tool.py ./
 
 # So we can run it with --user
 RUN mkdir /data && chmod 777 /data
@@ -40,6 +41,7 @@ ENV ANONYMIZED_TELEMETRY=False
 ENV IVCAP_BASE_URL=https://develop.ivcap.net
 ENV OPENAI_BASE_URL=https://mindweaver.develop.ivcap.io/litellm/v1
 ENV LITELLM_PROXY_URL=https://mindweaver.develop.ivcap.io/litellm/v1
-# ENV SERPER_API_KEY=1c886156ad5807d278daa2a31f78336254a601af
+ENV LITELLM_DEFAULT_MODEL=gpt-4.1
+ENV LITELLM_FALLBACK_MODEL=gpt-4o
 
 ENTRYPOINT ["python", "/app/service.py", "--port", "80"]
