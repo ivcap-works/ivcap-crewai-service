@@ -52,7 +52,7 @@ class LLMFactory:
         self.litellm_proxy_url = (
             litellm_proxy_url or os.getenv("LITELLM_PROXY_URL")
         )
-        self.default_model = os.getenv("LITELLM_DEFAULT_MODEL", "gpt-4o")
+        self.default_model = os.getenv("LITELLM_DEFAULT_MODEL", "gpt-4.1")
         self.fallback_model = os.getenv("LITELLM_FALLBACK_MODEL", "gpt-3.5-turbo")
         
         logger.info(
