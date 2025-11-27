@@ -16,7 +16,6 @@ Changes:
 - Added litellm.drop_params configuration to prevent parameter conflicts
 - Added embedder configuration for JWT-authenticated embeddings via LiteLLM proxy
 - Set OPENAI environment variables for tools that use OpenAI directly (WebsiteSearchTool)
-- Set IVCAP_JWT environment variable for artifact downloads authentication
 - Set CREWAI_STORAGE_DIR to job-specific path for complete RAG/memory/knowledge isolation
 - Added diagnostic logging for embedder config and RAG tools status
 - Added PDFSearchTool registration and import
@@ -66,8 +65,8 @@ logger = getLogger("app")
 service = Service(
     name="IVCAP CrewAI Service",
     contact={
-        "name": "Max Ott",
-        "email": "max.ott@data61.csiro.au",
+        "name": "Sonali Majumdar",
+        "email": "sonali.majumdar@data61.csiro.au",
     },
     license={
         "name": "MIT",
@@ -700,37 +699,5 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
 # ============================================================================
 
 if __name__ == "__main__":
-    import argparse
-    
-    # parser = argparse.ArgumentParser(description="IVCAP CrewAI Service")
-    # parser.add_argument(
-    #     '--port',
-    #     type=int,
-    #     default=8077,
-    #     help='Port to run the service on (managed by ivcap-ai-tool)'
-    # )
-    # parser.add_argument(
-    #     '--litellm-proxy',
-    #     type=str,
-    #     default=os.getenv('LITELLM_PROXY_URL'),
-    #     help='LiteLLM Proxy URL (overrides env var)'
-    # )
-    # parser.add_argument(
-    #     '--default-model',
-    #     type=str,
-    #     default=os.getenv('LITELLM_DEFAULT_MODEL', 'gpt-4.1'),
-    #     help='Default LLM model'
-    # )
-    # args = parser.parse_args()
-    
-    # # Update environment if CLI args provided
-    # if args.litellm_proxy:
-    #     os.environ["LITELLM_PROXY_URL"] = args.litellm_proxy
-    #     logger.info(f"Using LiteLLM proxy: {args.litellm_proxy}")
-    
-    # if args.default_model:
-    #     os.environ["LITELLM_DEFAULT_MODEL"] = args.default_model
-    #     logger.info(f"Using default model: {args.default_model}")
-    
     # Start server (port is configured in pyproject.toml via poetry-plugin-ivcap)
     start_tool_server(service)
