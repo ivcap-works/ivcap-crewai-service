@@ -4,7 +4,7 @@ import threading
 import hashlib
 from typing import ClassVar, Optional
 
-from crewai.utilities.events import (
+from crewai.events import (
     CrewKickoffStartedEvent,
     CrewKickoffCompletedEvent,
     AgentExecutionStartedEvent,
@@ -15,13 +15,9 @@ from crewai.utilities.events import (
     ToolUsageStartedEvent,
     ToolUsageFinishedEvent,
     ToolUsageErrorEvent,
-    # LLMCallStartedEvent,
-    # LLMStreamChunkEvent,
-    # LLMCallCompletedEvent,
     LLMCallFailedEvent,
+    BaseEventListener
 )
-from crewai.utilities.events.base_event_listener import BaseEventListener
-from crewai.agents.agent_builder.base_agent import BaseAgent
 
 from ivcap_service import BaseEvent, getLogger
 from pydantic import Field
@@ -84,10 +80,12 @@ class EventListener(BaseEventListener):
     def __init__(self):
         super().__init__()
 
-    def describe_agent(self, agent: BaseAgent):
+    def describe_agent(self, agent):
+        """Describe agent for logging (agent is crewai.Agent instance)"""
         return f"agent {agent.id} ({agent.role})"
 
-    def describe_agent_task(self, agent: BaseAgent, task):
+    def describe_agent_task(self, agent, task):
+        """Describe agent+task for logging"""
         return f"{self.describe_agent(agent)} with task '{task.description}'"
 
     def tool_call_id(self, event: ToolUsageEvent) -> str:

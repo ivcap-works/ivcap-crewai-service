@@ -1,23 +1,20 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Type
 import json
 import re
 from pprint import pprint
 import random
 
 from pydantic import BaseModel
-from langchain_core.tools.simple import Tool
-from langchain_core.callbacks import CallbackManagerForToolRun
-from langchain_core.tools.base import BaseTool
-from langchain_core.runnables import RunnableConfig
+from crewai.tools import BaseTool
 
 from datamodel_code_generator import DataModelType, PythonVersion
 from datamodel_code_generator.model import get_data_model_types
 from datamodel_code_generator.parser.jsonschema import JsonSchemaParser
 import requests
 
-def ivcap_tool(name: str, **kwargs: Any) -> Tool:
+def ivcap_tool(name: str, **kwargs: Any) -> BaseTool:
     url = "http://localhost:8000"
     resp = requests.get(url)
     if resp.status_code >= 300:
@@ -27,7 +24,7 @@ def ivcap_tool(name: str, **kwargs: Any) -> Tool:
     # pprint(service)
     return service
 
-def ivcap_tool_test(name: str, **kwargs: Any) -> Callable[[], Tool]:
+def ivcap_tool_test(name: str, **kwargs: Any) -> Callable[[], BaseTool]:
     import json
 
     with open(f"{name}.json", 'r') as f:
@@ -39,16 +36,13 @@ def ivcap_tool_test(name: str, **kwargs: Any) -> Callable[[], Tool]:
 class IvcapService(BaseTool):
     name: str
     description: str
-    args_schema: type[BaseModel]
+    args_schema: Type[BaseModel]
     service_props: Optional[BaseModel]
 
     url: str
 
     def _run(
         self,
-        *args: Any,
-        config: RunnableConfig,
-        run_manager: Optional[CallbackManagerForToolRun] = None,
         **kwargs: Any,
     ) -> str:
         action = self.args_schema(**kwargs)

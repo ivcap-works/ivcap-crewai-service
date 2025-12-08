@@ -1,3 +1,14 @@
+"""
+Service Type Definitions for IVCAP CrewAI Service
+Defines Pydantic models for crew specifications, agents, tasks, and tools
+
+Updated: Added tool filtering logic to gracefully handle missing artifacts
+Changes:
+- Added tool filtering in as_crew_agent() to skip artifact-dependent tools when no inputs_dir
+- Tools that require artifacts are silently filtered when artifacts are not provided
+- Prevents None tool values that would cause agent creation to fail
+"""
+
 from contextlib import redirect_stdout
 from dataclasses import dataclass
 import datetime
@@ -24,7 +35,7 @@ from dotenv import load_dotenv
 from crewai_tools import WebsiteSearchTool
 from crewai.types.usage_metrics import UsageMetrics
 #from langchain_core.agents import AgentAction, AgentFinish
-
+from ivcap_client import IVCAP
 from ivcap_tool import ivcap_tool_test
 from vectordb import create_vectordb_config
 
@@ -35,8 +46,26 @@ IVCAP_BASE_URL = os.environ.get("IVCAP_BASE_URL", "http://ivcap.local")
 
 @dataclass
 class Context():
+    """
+    Runtime context for crew/agent/task building.
+    Passed through the building pipeline to provide:
+    - VectorDB configuration for tools
+    - Job ID for isolation
+    - Optional artifacts directory
+    - Optional JWT for authentication
+    - Optional LLM factory for custom models
+    
+    Updated: Added job_id and optional fields for artifact/JWT support
+    """
     vectordb_config: dict
+    job_id: str
     tmp_dir: str = "/tmp"
+    
+    # Optional features (backward compatible)
+    inputs_dir: Optional[str] = None
+    jwt_token: Optional[str] = None
+    llm_factory: Optional[Any] = None
+    citation_manager: Optional[Any] = None
 
 supported_tools = {}
 def add_supported_tools(tools: dict[str, Callable[['ToolA'], BaseTool]]):
@@ -89,10 +118,14 @@ class ToolA(BaseModel):
                 n = id.split(":")[1]
                 id = "urn:sd-core:crewai.builtin." + n[0].lower() + n[1:]
 
-            if id.startswith("urn:sd-core:crewai.builtin."):
-                t = supported_tools.get(id)
-            elif id.startswith("urn:ivcap:service:"):
+            # First check if tool is registered in supported_tools
+            t = supported_tools.get(id)
+
+            # If not found and it's an IVCAP service, try dynamic loading
+            if not t and id.startswith("urn:ivcap:service:"):
                 t = ivcap_tool_test(id, **self.opts)
+
+            # If still not found, raise error
             if not t:
                 raise ValueError(f"Unsupported tool '{id}'")
             tool = t(self, ctxt)
@@ -106,7 +139,7 @@ class AgentA(BaseModel):
     role: str = Field(description="role description of this agent")
     goal: str = Field(description="goal description for this agent")
     backstory: str = Field(description="the backstroy of this agent")
-    llm: str = Field(None, description="name of LLM to use for this agent")
+    llm: Optional[str] = Field(None, description="Optional custom model for this agent")
     max_iter: int = Field(15, description="max. number of iternations.")
     verbose: bool = Field(False, description="be verbose")
     memory: bool = Field(False, description="use memory")
@@ -114,11 +147,69 @@ class AgentA(BaseModel):
     tools: List[ToolA] = Field([], description="list of tools the agent can use")
 
     def as_crew_agent(self, ctxt: Context, **kwargs) -> Agent:
-
+        """
+        Create Agent with optional custom LLM.
+        
+        Updated: Supports per-agent custom LLM models via llm_factory
+        Updated: Added tool filtering to skip artifact-dependent tools when no artifacts provided
+        """
         try:
             d = self.model_dump(mode='python')
-            d['tools'] = [t.as_crew_tool(ctxt) for t in self.tools]
-            #d['verbose'] = True
+            
+            # Filter tools - skip artifact-dependent tools when no inputs_dir available
+            artifact_dependent_tools = {
+                "builtin:DirectoryReadTool",
+                "urn:sd-core:crewai.builtin.directoryReadTool",
+                "builtin:DirectorySearchTool", 
+                "urn:sd-core:crewai.builtin.directorySearchTool",
+                "builtin:PDFSearchTool",
+                "urn:sd-core:crewai.builtin.pdfSearchTool",
+                "builtin:FileReadTool",
+                "urn:sd-core:crewai.builtin.fileReadTool",
+            }
+            
+            tools = []
+            for t in self.tools:
+                # Skip artifact-dependent tools when no inputs_dir available
+                if t.id in artifact_dependent_tools and not ctxt.inputs_dir:
+                    import logging
+                    logging.getLogger("app.crew_builder").info(
+                        f"Skipping tool {t.name} for agent {self.name} - no artifacts provided"
+                    )
+                    continue
+                
+                try:
+                    tool = t.as_crew_tool(ctxt)
+                    tools.append(tool)
+                except Exception as e:
+                    import logging
+                    logging.getLogger("app.crew_builder").error(
+                        f"Failed to initialize tool {t.name} for agent {self.name}: {e}"
+                    )
+                    raise
+            
+            d['tools'] = tools
+            
+            # Per-agent custom LLM
+            if self.llm and ctxt.llm_factory and ctxt.jwt_token:
+                try:
+                    custom_llm = ctxt.llm_factory.create_llm(
+                        jwt_token=ctxt.jwt_token,
+                        model=self.llm,
+                        temperature=0.7,
+                        max_tokens=4000
+                    )
+                    d['llm'] = custom_llm
+                except Exception as e:
+                    import logging
+                    logging.warning(
+                        f"Failed to create custom LLM for agent {self.name}: {e}. "
+                        f"Using crew default."
+                    )
+                    d.pop('llm', None)
+            else:
+                d.pop('llm', None)  # Use crew's LLM
+            
             d.update(**kwargs)
             a = Agent(**d)
             return a
@@ -133,25 +224,54 @@ class TaskA(BaseModel):
     agent: str = Field(description="name of agent to use for this task")
     tools: List[ToolA] = Field([])
     async_execution: Optional[bool] = Field(False)
-    context: Optional[List[str]] = Field([])
+    context: Optional[List[str]] = Field([])  # String names, not Task objects!
 
-    def as_crew_task(self, agents: list[Agent], ctxt: Context, **kwargs) -> Task:
-        d = self.model_dump(mode='python')
-        an = d.get('agent', None)
-        agent = agents.get(an, None)
-        if agent:
-            d['agent'] = agent
-        else:
-            raise ValueError(f"unknown agent '{an}'")
+    def as_crew_task(self, agents: Dict[str, Agent], ctxt: Context, **kwargs) -> Task:
+        """
+        Create Task object WITHOUT resolving context.
+        
+        Context resolution happens in CrewBuilder (two-pass).
+        This method only:
+        1. Resolves agent name → Agent object
+        2. Converts tools
+        3. Creates Task with basic config
+        
+        CrewBuilder will later set task.context = [Task objects]
+        
+        Updated: Excludes context field - CrewBuilder handles resolution
+        """
+        # Get dict representation, excluding context (handled by CrewBuilder)
+        d = self.model_dump(mode='python', exclude={'context'})
+        
+        # Resolve agent reference
+        agent_name = d.pop('agent')
+        if agent_name not in agents:
+            raise ValueError(
+                f"Unknown agent '{agent_name}'. "
+                f"Available agents: {list(agents.keys())}"
+            )
+        d['agent'] = agents[agent_name]
+        
+        # Convert tools
         d['tools'] = [t.as_crew_tool(ctxt) for t in self.tools]
+        
+        # Apply overrides
         d.update(**kwargs)
-        t = Task(**d)
-        return t
+        
+        # Create Task (context will be set by CrewBuilder)
+        task = Task(**d)
+        return task
 
 class CrewA(BaseModel):
     @classmethod
-    def from_aspect(cls, aspect_urn: str) -> 'CrewA':
-        content = load_ivcap_aspect(aspect_urn)
+    def from_aspect(cls, aspect_urn: str, ivcap:IVCAP) -> 'CrewA':
+        """Loads an aspect from crew"""
+        ivcap_aspects = list(ivcap.list_aspects(entity=aspect_urn, limit=1))
+        if ivcap_aspects:
+            aspect = ivcap_aspects[0]
+            content = aspect.content
+        else:
+            raise ValueError(f"Aspect not found. {aspect_urn}")
         content['verbose'] = False # should be set on execution
         agents = []
         for name, a in content.get("agents", {}).items():
@@ -187,38 +307,56 @@ class CrewA(BaseModel):
         description="Maximum number of requests per minute for the crew execution to be respected.",
     )
 
-    def as_crew(self, llm: LLM, job_id: str, **kwargs) -> Crew:
-        ctxt = Context(vectordb_config=create_vectordb_config(job_id))
-        agents = {}
-        for a in self.agents: agents[a.name] = a.as_crew_agent(llm=llm, ctxt=ctxt)
-        tasks = [t.as_crew_task(agents, ctxt=ctxt) for t in self.tasks]
-
-        # result = {}
-        # def step_callback(a: Union[AgentFinish, List[Tuple[AgentAction, str]]]):
-        #     if isinstance(a, list):
-        #         for (aa, s) in a:
-        #             if isinstance(aa, AgentAction):
-        #                 result.append(aa.dict())
-        #                 return
-        #     if isinstance(a, AgentFinish):
-        #         result.append(a.dict())
-
-        d = self.model_dump(mode='python')
-        d.update({
-            "agents": agents.values(),
-            "tasks": tasks,
-            "verbose": True,  # 2, # You can set it to 1 or 2 to different logging levels
-            # output_log_file=False,
-            # "step_callback": step_callback,
-            # max_consecutive_auto_reply=3,
-            "allow_parallel": True,
-            # temperature=0.7,
-            # request_timeout=300,
-            # hide_output=False,
-            "raise_error": True
-        })
-        d.update(**kwargs)
-        return Crew(**d)
+    def as_crew(
+        self,
+        llm: LLM,
+        job_id: str,
+        planning_llm: Optional[LLM] = None,
+        embedder: Optional[dict] = None,
+        inputs_dir: Optional[str] = None,
+        jwt_token: Optional[str] = None,
+        knowledge_sources: Optional[list] = None,
+        **kwargs
+    ) -> Crew:
+        """
+        Build Crew using CrewBuilder for proper task context resolution.
+        
+        This is the entry point from service.py. It:
+        1. Creates Context with all runtime info
+        2. Delegates to CrewBuilder for proper task chaining
+        3. Returns fully configured Crew
+        
+        Updated: Uses CrewBuilder for two-pass task context resolution
+        Updated: Added embedder parameter for JWT-authenticated embeddings
+        Updated: Added knowledge_sources parameter for previous crew outputs
+        """
+        # Import here to avoid circular dependency
+        from llm_factory import get_llm_factory
+        from crew_builder import CrewBuilder
+        
+        # Build context
+        ctxt = Context(
+            vectordb_config=create_vectordb_config(job_id, jwt_token),
+            job_id=job_id,
+            inputs_dir=inputs_dir,
+            jwt_token=jwt_token,
+            llm_factory=get_llm_factory() if jwt_token else None,
+            citation_manager=None  # Not implemented in this version
+        )
+        
+        # Use CrewBuilder for proper task context resolution
+        builder = CrewBuilder(ctxt)
+        crew = builder.build_crew(
+            crew_spec=self,
+            llm=llm,
+            job_id=job_id,
+            planning_llm=planning_llm,
+            embedder=embedder,
+            knowledge_sources=knowledge_sources,
+            **kwargs
+        )
+        
+        return crew
 
 class TaskResponse(BaseModel):
     agent: str
