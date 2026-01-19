@@ -98,7 +98,7 @@ curl -i -X POST \
     "keywords": "AI, Software",
     "additional_information": ""
   },
-  "crew-ref": "urn:ivcap:aspect:1a32a472-ba89-49ac-8bf2-9434c8dff2a0",
+  "crew-ref": "urn:sd:crewai:crew.deepresearch",
   "artifact-urns": []
 }' \
     "https://develop.ivcap.net/1/services2/urn:ivcap:service:YOUR_SERVICE_URN/jobs"
