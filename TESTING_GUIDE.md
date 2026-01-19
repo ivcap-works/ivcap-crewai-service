@@ -29,11 +29,11 @@ curl -d '{
 **Request Schema**:
 ```json
 {
-  "name": "execution_name",           // Required
-  "inputs": {"key": "value"},         // Optional variables (varies by crew - see below)
-  "crew": {...},                      // Option 1: Inline crew definition
-  "crew-ref": "urn:ivcap:aspect:...", // Option 2: Reference to stored crew
-  "artifact-urns": ["urn:..."]        // Optional: Download artifacts
+  "name": "execution_name",                      // Required
+  "inputs": {"key": "value"},                    // Optional variables (varies by crew - see below)
+  "crew": {...},                                 // Option 1: Inline crew definition
+  "crew-ref": "urn:sd:crewai:crew.deepresearch", // Option 2: Reference to stored crew
+  "artifact-urns": ["urn:..."]                   // Optional: Download artifacts
 }
 ```
 
