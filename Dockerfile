@@ -15,9 +15,6 @@ WORKDIR /app
 COPY pyproject.toml poetry.lock ./
 RUN poetry config virtualenvs.create false && poetry install --no-root
 
-# COPY requirements-dev.txt ./
-# RUN pip install -r requirements-dev.txt --force-reinstall
-
 # Get service files
 ADD service.py ivcap_tool.py service_types.py vectordb.py events.py logging.json utils.py llm_factory.py artifact_manager.py crew_builder.py ./
 ADD ivcap_langgraph_tool.py ./
@@ -29,7 +26,7 @@ RUN mkdir /.local && chmod 777 /.local
 RUN mkdir /.mem0 && chmod 777 /.mem0
 
 # VERSION INFORMATION
-ARG VERSION ???
+ARG VERSION 2.0.0
 ENV VERSION=$VERSION
 
 # ALERT!!! Should NOT copy keys into docker container

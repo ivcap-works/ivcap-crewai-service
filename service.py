@@ -70,6 +70,7 @@ except Exception as e:
 # Define IVCAP service metadata
 service = Service(
     name="IVCAP CrewAI Service",
+    version=os.getenv("VERSION"),
     contact={
         "name": "Sonali Majumdar",
         "email": "sonali.majumdar@data61.csiro.au",
