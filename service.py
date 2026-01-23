@@ -48,7 +48,7 @@ from crewai import LLM
 from crewai.types.usage_metrics import UsageMetrics
 from crewai_tools import DirectoryReadTool, DirectorySearchTool, FileReadTool, PDFSearchTool, SerperDevTool, ScrapeWebsiteTool, WebsiteSearchTool
 
-from ivcap_service import getLogger, Service, JobContext
+from ivcap_service import getLogger, Service, JobContext, get_secret
 from ivcap_ai_tool import start_tool_server, ToolOptions, ivcap_ai_tool, logging_init
 from ivcap_client import IVCAP
 
@@ -60,6 +60,12 @@ from ivcap_langgraph_tool import create_langgraph_tool
 # Initialize logging
 logging_init("./logging.json")
 logger = getLogger("app")
+
+# for local test env, please set the SERPER_API_KEY explicitly
+try:
+    get_secret("SERPER_API_KEY")
+except Exception as e:
+    logger.error("failed to load SERPER_API_KEY key, will impact the SERPER search tool functionality %s", e)
 
 # Define IVCAP service metadata
 service = Service(
@@ -83,10 +89,10 @@ class CrewRequest(BaseModel):
     jschema: str = Field("urn:sd-core:schema.crewai.request.1", alias="$schema")
     name: str = Field(description="Name of this crew execution")
     inputs: Optional[dict] = Field(None, description="Input variables for crew")
-    
+
     # Crew definition (one of these required)
     crew_ref: Optional[str] = Field(
-        None, 
+        None,
         description="IVCAP aspect URN referencing crew definition",
         alias="crew-ref"
     )
@@ -94,7 +100,7 @@ class CrewRequest(BaseModel):
         None,
         description="Inline crew definition"
     )
-    
+
     # Optional features
     artifact_urns: Optional[list[str]] = Field(
         None,
@@ -110,7 +116,7 @@ class CrewRequest(BaseModel):
         False,
         description="Enable citation tracking (experimental)"
     )
-    
+
     model_config = ConfigDict(populate_by_name=True)
 
 
@@ -134,34 +140,34 @@ class CrewResponse(BaseModel):
 
 add_supported_tools({
     # SerperDevTool - web search (requires SERPER_API_KEY)
-    "urn:sd-core:crewai.builtin.serperDevTool": 
+    "urn:sd-core:crewai.builtin.serperDevTool":
         lambda _, ctxt: SerperDevTool(),
-    
+
     # ScrapeWebsiteTool - scrape any website during execution
     # Can be initialized with specific URL or dynamically scrape any site
     "urn:sd-core:crewai.builtin.scrapeWebsiteTool":
         lambda _, ctxt: ScrapeWebsiteTool(),
-    
+
     # DirectoryReadTool - requires inputs_dir (lists files, not semantic search)
-    "urn:sd-core:crewai.builtin.directoryReadTool": 
-        lambda _, ctxt: DirectoryReadTool(directory=ctxt.inputs_dir) 
+    "urn:sd-core:crewai.builtin.directoryReadTool":
+        lambda _, ctxt: DirectoryReadTool(directory=ctxt.inputs_dir)
         if ctxt.inputs_dir else DirectoryReadTool(directory="."),
-    
+
     # DirectorySearchTool - requires inputs_dir (inherits embedder from Crew)
-    "urn:sd-core:crewai.builtin.directorySearchTool": 
+    "urn:sd-core:crewai.builtin.directorySearchTool":
         lambda _, ctxt: DirectorySearchTool(
             directory=ctxt.inputs_dir or "."
             # NO config needed - uses Crew's embedder automatically!
         ),
-    
+
     # PDFSearchTool - for semantic search within PDF documents (inherits embedder from Crew)
-    "urn:sd-core:crewai.builtin.pdfSearchTool": 
+    "urn:sd-core:crewai.builtin.pdfSearchTool":
         lambda _, ctxt: PDFSearchTool(),
-    
+
     # FileReadTool - requires inputs_dir for base path
     "urn:sd-core:crewai.builtin.fileReadTool":
         lambda _, ctxt: FileReadTool(file_path=ctxt.inputs_dir or "."),
-    
+
     # WebsiteSearchTool - semantic search with vector embeddings
     "urn:sd-core:crewai.builtin.websiteSearchTool":
         lambda _, ctxt: WebsiteSearchTool(config=ctxt.vectordb_config),
@@ -181,16 +187,16 @@ add_supported_tools({
 def crew_wants_artifact_tools(crew_def) -> bool:
     """
     Check if crew intends to use tools for artifact access.
-    
+
     Returns True if:
     - ANY agent has DirectoryReadTool already defined
     - FIRST agent has "research" or "search" in their goal (case-insensitive)
-    
+
     Returns False otherwise (crew will use knowledge sources instead)
-    
+
     Args:
         crew_def: CrewA specification object
-    
+
     Returns:
         bool: True if crew should use tools, False if should use knowledge sources
     """
@@ -202,29 +208,29 @@ def crew_wants_artifact_tools(crew_def) -> bool:
         )
         if has_directory_tool:
             return True
-    
+
     # Check goal for research/search keywords ONLY in first agent
     if crew_def.agents:
         first_agent = crew_def.agents[0]
         goal_lower = first_agent.goal.lower()
         if "research" in goal_lower or "search" in goal_lower:
             return True
-    
+
     return False
 
 def get_auth_token(job_ctxt: JobContext) -> Optional[str]:
     """
     Extract JWT token from JobContext.
-    
+
     Tries multiple paths for maximum compatibility:
     1. job_ctxt.job_authorization (IVCAP v0.7.17+)
     2. job_ctxt.auth_token (older versions)
     3. job_ctxt.headers['Authorization'] (HTTP headers)
     4. job_ctxt.request.headers['Authorization'] (nested request)
-    
+
     Args:
         job_ctxt: IVCAP job context
-    
+
     Returns:
         JWT token string without "Bearer " prefix, or None
     """
@@ -239,7 +245,7 @@ def get_auth_token(job_ctxt: JobContext) -> Optional[str]:
                 return token[7:]
             logger.info(f"✓ JWT extracted from job_authorization (length: {len(str(token))})")
             return token
-    
+
     # Path 2: Direct auth_token attribute (older versions)
     if hasattr(job_ctxt, 'auth_token'):
         token = job_ctxt.auth_token
@@ -247,7 +253,7 @@ def get_auth_token(job_ctxt: JobContext) -> Optional[str]:
         if token:
             logger.info(f"✓ JWT extracted from auth_token (length: {len(str(token))})")
             return token
-    
+
     # Path 3: Headers dict
     if hasattr(job_ctxt, 'headers'):
         headers = job_ctxt.headers if isinstance(job_ctxt.headers, dict) else {}
@@ -256,7 +262,7 @@ def get_auth_token(job_ctxt: JobContext) -> Optional[str]:
         if auth_header.startswith('Bearer '):
             logger.info(f"✓ JWT extracted from headers (length: {len(auth_header)-7})")
             return auth_header[7:]  # Strip "Bearer " prefix
-    
+
     # Path 4: Nested request object
     if hasattr(job_ctxt, 'request') and hasattr(job_ctxt.request, 'headers'):
         auth_header = job_ctxt.request.headers.get('Authorization', '')
@@ -264,7 +270,7 @@ def get_auth_token(job_ctxt: JobContext) -> Optional[str]:
         if auth_header.startswith('Bearer '):
             logger.info(f"✓ JWT extracted from request.headers (length: {len(auth_header)-7})")
             return auth_header[7:]
-    
+
     logger.warning("✗ No JWT token found in any path (job_authorization, auth_token, headers, request.headers)")
     return None
 
@@ -272,13 +278,13 @@ def get_auth_token(job_ctxt: JobContext) -> Optional[str]:
 def load_crew_definition(req: CrewRequest, ivcap:IVCAP) -> CrewA:
     """
     Load crew definition from request.
-    
+
     Args:
         req: Crew request with either crew_ref or inline crew
-    
+
     Returns:
         CrewA definition
-    
+
     Raises:
         ValueError: If no crew definition provided
     """
@@ -288,11 +294,11 @@ def load_crew_definition(req: CrewRequest, ivcap:IVCAP) -> CrewA:
         crew_def = req.crew
     else:
         raise ValueError("Must provide either 'crew-ref' or 'crew' in request")
-    
+
     # Use request name if crew doesn't have one
     if not crew_def.name:
         crew_def.name = req.name
-    
+
     return crew_def
 
 
@@ -302,26 +308,26 @@ def create_authenticated_llm(
 ) -> tuple[LLM, LLM, Optional[dict], Optional[str]]:
     """
     Create LLM instances with JWT authentication and embedder configuration.
-    
+
     Args:
         jwt_token: JWT token from JobContext
         inputs: Request inputs (may contain llm_model override)
-    
+
     Returns:
         Tuple of (main_llm, planning_llm, embedder_config, litellm_proxy_url)
     """
     factory = get_llm_factory()
-    
+
     # Check for model override in inputs
     model_override = inputs.get("llm_model") if inputs else None
-    
+
     llm = factory.create_llm(
         jwt_token=jwt_token,
         model=model_override,
         temperature=0.7,
         max_tokens=4000
     )
-    
+
     # Create planning LLM (same model, same auth)
     planning_llm = factory.create_llm(
         jwt_token=jwt_token,
@@ -329,13 +335,13 @@ def create_authenticated_llm(
         temperature=0.7,
         max_tokens=4000
     )
-    
+
     # Create embedder configuration if using litellm proxy
     embedder_config = None
     if jwt_token and factory.litellm_proxy_url:
         embedder_config = factory.create_embedder_config(jwt_token)
         logger.info("✓ Created embedder configuration for litellm proxy")
-    
+
     return llm, planning_llm, embedder_config, factory.litellm_proxy_url
 
 
@@ -347,7 +353,7 @@ def create_authenticated_llm(
 async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
     """
     Execute CrewAI crew with artifact support and authentication.
-    
+
     Workflow:
         1. Extract JWT token from JobContext
         2. Download artifacts (if provided)
@@ -356,11 +362,11 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         5. Execute crew
         6. Cleanup artifacts
         7. Return response
-    
+
     Args:
         req: Crew execution request
         jobCtxt: IVCAP job context (injected by decorator)
-    
+
     Returns:
         Crew execution response with results
     """
@@ -368,11 +374,11 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
     artifact_mgr = ArtifactManager(jobCtxt.job_id)
     citation_mgr = None
     inputs_dir = None
-    
+
     try:
         # ==================== STEP 1: AUTHENTICATION ====================
         jwt_token = get_auth_token(jobCtxt)
-        
+
         # DEBUG: Log JobContext attributes to find where token actually is
         logger.debug(f"JobContext attributes: {dir(jobCtxt)}")
         if hasattr(jobCtxt, 'headers'):
@@ -383,7 +389,7 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
                 logger.debug(f"JobContext.request.headers: {dict(jobCtxt.request.headers)}")
             if hasattr(jobCtxt.request, '__dict__'):
                 logger.debug(f"JobContext.request attributes: {list(jobCtxt.request.__dict__.keys())}")
-        
+
         if jwt_token:
             logger.info(f"✓ JWT token detected for LLM authentication (length: {len(jwt_token)})")
             os.environ["CREWAI_STORAGE_DIR"] = f"runs/{jobCtxt.job_id}"
@@ -392,7 +398,7 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
             logger.warning("✗ No JWT token found - LLM calls will fall back to direct OpenAI API")
             os.environ["CREWAI_STORAGE_DIR"] = f"runs/{jobCtxt.job_id}"
             logger.info(f"✓ Set CREWAI_STORAGE_DIR for job isolation (no JWT)")
-        
+
         # ==================== STEP 2: ARTIFACTS ====================
         ivcap = jobCtxt.ivcap
         if req.artifact_urns:
@@ -401,19 +407,19 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
                 req.artifact_urns,
                 ivcap
             )
-            
+
             if inputs_dir:
                 # Inject inputs directory path into crew inputs
                 if req.inputs is None:
                     req.inputs = {}
                 req.inputs['inputs_directory'] = inputs_dir
                 logger.info(f"✓ Artifacts available at: {inputs_dir}")
-                
+
                 # Detect file types and recommend appropriate tools
                 inputs_path = Path(inputs_dir)
                 pdf_files = list(inputs_path.glob("*.pdf"))
                 text_files = list(inputs_path.glob("*.txt")) + list(inputs_path.glob("*.md")) + list(inputs_path.glob("*.csv"))
-                
+
                 if pdf_files:
                     logger.info(f"📄 Detected {len(pdf_files)} PDF file(s) - PDFSearchTool recommended")
                     logger.info(f"   Files: {', '.join([f.name for f in pdf_files[:5]])}")
@@ -429,57 +435,57 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
                     f"Cannot proceed as crew may depend on these files. "
                     f"Check artifact URNs and permissions."
                 )
-        
+
         # ==================== STEP 3: CITATIONS (optional - not implemented) ====================
         # Citation tracking is prepared but not enabled in this version
         # if req.enable_citations:
         #     citation_mgr = setup_citation_manager(jobCtxt.job_id)
         #     logger.info(f"Citation tracking enabled for job {jobCtxt.job_id}")
-        
+
         # ==================== STEP 4: LOAD CREW ====================
         crew_def = load_crew_definition(req, ivcap)
         logger.info(f"Loaded crew definition: {crew_def.name}")
-        
+
         # ==================== STEP 4.5: SMART ARTIFACT HANDLING ====================
         artifact_knowledge_sources = []
         if req.artifact_urns and inputs_dir:
             from service_types import ToolA
-            
+
             inputs_path = Path(inputs_dir)
             pdf_files = list(inputs_path.glob("*.pdf"))
             text_files = list(inputs_path.glob("*.txt")) + list(inputs_path.glob("*.md")) + list(inputs_path.glob("*.csv"))
-            
+
             # Decide: tools or knowledge sources?
             use_tools = crew_wants_artifact_tools(crew_def)
-            
+
             if use_tools:
                 logger.info("🔧 Crew has DirectoryReadTool or research/search agents - using tool injection")
-                
+
                 # Identify agents that should get tools (have DirectoryReadTool OR research/search in role/goal)
                 agents_needing_tools = []
                 for agent in crew_def.agents:
                     has_directory_read = any(
-                        t.id in ["builtin:DirectoryReadTool", "urn:sd-core:crewai.builtin.directoryReadTool"] 
+                        t.id in ["builtin:DirectoryReadTool", "urn:sd-core:crewai.builtin.directoryReadTool"]
                         for t in agent.tools
                     )
                     role_lower = agent.role.lower()
                     goal_lower = agent.goal.lower()
                     has_research_goal = "research" in role_lower or "search" in role_lower or "research" in goal_lower or "search" in goal_lower
-                    
+
                     if has_directory_read or has_research_goal:
                         agents_needing_tools.append(agent)
                         logger.info(f"  Agent '{agent.name}' qualified for tool injection (has_directory_read={has_directory_read}, has_research_goal={has_research_goal})")
-                
+
                 if not agents_needing_tools:
                     logger.warning("⚠ Tool mode detected but no agents qualified for tool injection")
-                
+
                 # Inject tools into qualified agents
                 for agent in agents_needing_tools:
                     has_directory_read = any(
-                        t.id in ["builtin:DirectoryReadTool", "urn:sd-core:crewai.builtin.directoryReadTool"] 
+                        t.id in ["builtin:DirectoryReadTool", "urn:sd-core:crewai.builtin.directoryReadTool"]
                         for t in agent.tools
                     )
-                    
+
                     # Inject DirectoryReadTool if not present
                     if not has_directory_read:
                         dir_tool = ToolA(
@@ -489,11 +495,11 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
                         )
                         agent.tools.append(dir_tool)
                         logger.info(f"  → Auto-injected DirectoryReadTool into agent '{agent.name}'")
-                    
+
                     # Inject PDFSearchTool if PDFs detected
                     if pdf_files:
                         has_pdf_search = any(
-                            t.id in ["builtin:PDFSearchTool", "urn:sd-core:crewai.builtin.pdfSearchTool"] 
+                            t.id in ["builtin:PDFSearchTool", "urn:sd-core:crewai.builtin.pdfSearchTool"]
                             for t in agent.tools
                         )
                         if not has_pdf_search:
@@ -504,11 +510,11 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
                             )
                             agent.tools.append(pdf_tool)
                             logger.info(f"  → Auto-injected PDFSearchTool into agent '{agent.name}'")
-                    
+
                     # Inject DirectorySearchTool if text files detected
                     if text_files:
                         has_dir_search = any(
-                            t.id in ["builtin:DirectorySearchTool", "urn:sd-core:crewai.builtin.directorySearchTool"] 
+                            t.id in ["builtin:DirectorySearchTool", "urn:sd-core:crewai.builtin.directorySearchTool"]
                             for t in agent.tools
                         )
                         if not has_dir_search:
@@ -519,7 +525,7 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
                             )
                             agent.tools.append(text_tool)
                             logger.info(f"  → Auto-injected DirectorySearchTool into agent '{agent.name}'")
-            
+
             else:
                 logger.info("📚 Crew has no DirectoryReadTool or research/search agents - using knowledge sources")
                 from knowledge_processor import create_knowledge_sources_from_artifacts
@@ -529,10 +535,10 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
                     logger.info("  All agents will have automatic RAG access to artifacts")
                 except Exception as e:
                     logger.error(f"Failed to create artifact knowledge sources: {e}", exc_info=True)
-        
+
         # ==================== STEP 5: CREATE LLM ====================
         llm, planning_llm, embedder_config, litellm_proxy_url = create_authenticated_llm(jwt_token, req.inputs)
-        
+
         # Test LLMs to validate authentication
         logger.info("Testing LLM authentication...")
         try:
@@ -542,7 +548,7 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         except Exception as e:
             logger.error(f"✗ Main LLM test failed: {e}")
             raise RuntimeError(f"LLM authentication test failed: {e}") from e
-        
+
         try:
             planning_test_response = planning_llm.call(messages=[{"role": "user", "content": "Hello"}])
             logger.info("✓ Planning LLM test successful")
@@ -550,20 +556,20 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         except Exception as e:
             logger.error(f"✗ Planning LLM test failed: {e}")
             raise RuntimeError(f"Planning LLM authentication test failed: {e}") from e
-        
+
         # Set OpenAI environment variables for tools that use OpenAI directly
         if jwt_token and litellm_proxy_url:
             os.environ["OPENAI_API_KEY"] = jwt_token
             os.environ["OPENAI_API_BASE"] = litellm_proxy_url
             logger.info(f"✓ Set OpenAI environment for tool compatibility")
-        
+
         # ==================== STEP 6: PROCESS KNOWLEDGE SOURCES ====================
         knowledge_sources = []
-        
+
         # Add artifact knowledge sources (if using knowledge source mode)
         if artifact_knowledge_sources:
             knowledge_sources.extend(artifact_knowledge_sources)
-        
+
         # Process additional-inputs (previous crew outputs)
         if req.additional_inputs:
             logger.info("📚 Processing additional inputs as knowledge sources...")
@@ -574,14 +580,14 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
                 logger.info(f"✓ Created {len(additional_sources)} knowledge sources from additional inputs")
             except Exception as e:
                 logger.error(f"Failed to process additional inputs: {e}", exc_info=True)
-        
+
         if knowledge_sources:
             logger.info(f"📚 Total knowledge sources for crew: {len(knowledge_sources)}")
             if embedder_config:
                 logger.info("  Knowledge sources will use JWT-authenticated embedder")
             else:
                 logger.warning("  ⚠ Knowledge sources without embedder - may use default OpenAI")
-        
+
         # ==================== STEP 7: BUILD CREW ====================
         # CrewBuilder handles task context resolution!
         crew = crew_def.as_crew(
@@ -596,12 +602,12 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
             verbose=False,
             # planning value now comes from crew_spec.planning (defaults to False)
         )
-        
+
         logger.info(
             f"✓ Crew built: {len(crew.agents)} agents, "
             f"{len(crew.tasks)} tasks"
         )
-        
+
         # Log embedder and RAG tools status
         if embedder_config:
             embedder_model = embedder_config.get('config', {}).get('model', 'unknown')
@@ -611,28 +617,28 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         else:
             logger.warning("⚠ RAG tools disabled: No embedder configured")
             logger.warning("  DirectorySearchTool will NOT work without embedder")
-        
+
         # ==================== STEP 8: EXECUTE ====================
         logger.info(f"Executing crew: {req.name}")
         start_time = (time.process_time(), time.time())
-        
+
         # Create outputs directory
         outputs_dir = Path(f"runs/{jobCtxt.job_id}/outputs")
         outputs_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"Created outputs directory: {outputs_dir}")
-        
+
         crew_result = crew.kickoff(req.inputs)
-        
+
         end_time = (time.process_time(), time.time())
         logger.info(f"✓ Crew execution complete")
-        
+
         # Save task outputs to individual files
         for i, task_output in enumerate(crew_result.tasks_output):
             task_name = task_output.name or f"task_{i+1}"
             # Sanitize filename
             safe_task_name = "".join(c if c.isalnum() or c in ('_', '-') else '_' for c in task_name)
             task_file = outputs_dir / f"{i+1:02d}_{safe_task_name}.md"
-            
+
             try:
                 with open(task_file, 'w', encoding='utf-8') as f:
                     f.write(f"# Task: {task_output.name}\n\n")
@@ -643,7 +649,7 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
                 logger.info(f"✓ Saved task output: {task_file.name}")
             except Exception as e:
                 logger.warning(f"Failed to save task output {task_name}: {e}")
-        
+
         # Save final crew output
         final_output_file = outputs_dir / "final_output.md"
         try:
@@ -656,11 +662,11 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
             logger.info(f"✓ Saved final output: {final_output_file.name}")
         except Exception as e:
             logger.warning(f"Failed to save final output: {e}")
-        
+
         # ==================== STEP 8: CITATIONS (if enabled) ====================
         citations_report = None
         # Citation tracking not implemented in this version
-        
+
         # ==================== STEP 9: BUILD RESPONSE ====================
         response = CrewResponse(
             answer=crew_result.raw,
@@ -679,14 +685,14 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
             token_usage=crew_result.token_usage,
             citations=citations_report
         )
-        
+
         logger.info(
             f"Response ready: {len(response.answer)} chars, "
             f"{len(response.task_responses)} tasks"
         )
-        
+
         return response
-    
+
     finally:
         # ==================== CLEANUP ====================
         # Always cleanup artifacts, even on failure
