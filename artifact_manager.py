@@ -64,28 +64,32 @@ MIME_TO_EXT = {
 class ArtifactManager:
     """
     Manages artifact lifecycle for a specific job.
-    
+
     Directory structure:
-        runs/{job_id}/
+        {IVCAP_RUNS_BASE_DIR}/runs/{job_id}/
             inputs/           # Downloaded artifacts
             chroma.sqlite3    # VectorDB (managed separately)
-    
+
+    The base directory is configurable via IVCAP_RUNS_BASE_DIR environment variable (default: /tmp)
+
     Usage:
         mgr = ArtifactManager(job_id="urn:ivcap:job:123...")
         inputs_dir = mgr.download_artifacts(["urn:ivcap:artifact:abc"], ivcap_client)
         # ... use artifacts ...
         mgr.cleanup()  # Remove all artifacts
     """
-    
+
     def __init__(self, job_id: str):
         """
         Initialize manager for specific job.
-        
+
         Args:
             job_id: IVCAP job identifier (e.g., "urn:ivcap:job:uuid")
         """
         self.job_id = job_id
-        self.base_dir = Path(f"runs/{job_id}")
+        # Get base directory from environment variable (default: /tmp)
+        base_dir_root = os.getenv("IVCAP_RUNS_BASE_DIR", "/tmp")
+        self.base_dir = Path(base_dir_root) / "runs" / job_id
         self.inputs_dir = self.base_dir / "inputs"
     
     def _get_filename_with_extension(

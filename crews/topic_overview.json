@@ -1,0 +1,142 @@
+{
+    "$entity": "urn:sd:crewai:crew.topic_overview",
+    "$schema": "urn:sd:schema:icrew-crew.1",
+    "crew": {
+        "agents": [
+        {
+            "name": "analysis_agent",
+            "allow_delegation": true,
+            "backstory": "You are a Research Analyst with a strong background in qualitative and quantitative synthesis related to {research_topic}. You excel at identifying patterns, themes, and contradictions across a body of literature ({keywords}). You can map the evolution of research, pinpoint critical knowledge gaps, recognize emerging trends, and objectively summarize debates or controversies, always considering the scope constraints defined in {additional_information}. You leverage other information from {additional_information} to interpret the significance of findings within the broader scientific or industry landscape.",
+            "goal": "Analyze the collected literature on {research_topic}, synthesizing key findings related to {keywords}. Identify major themes, research gaps, emerging trends, and significant controversies within the scope constraints defined in {additional_information}. Use other information from {additional_information} to contextualize the analysis.",
+            "llm": "?llmodel",
+            "max_iter": 10,
+            "memory": true,
+            "role": "Research Synthesis & Trend Analyst",
+            "tools": [
+                {
+                "description": "A tool that can be used to search the internet with a search_query.",
+                "id": "builtin:SerperDevTool",
+                "name": "SerperDevTool"
+                },
+                {
+                "description": "A tool that can be used to semantic search a query from a specific URL content.",
+                "id": "builtin:WebsiteSearchTool",
+                "name": "WebsiteSearchTool"
+            }
+        ],
+        "verbose": true
+        },
+        {
+            "name": "literature_reviewer",
+            "allow_delegation": true,
+            "backstory": "You are a highly experienced Information Scientist specializing in systematic reviews and evidence mapping within the field of {research_topic}. You are adept at formulating precise search strategies for academic databases (e.g., PubMed, Scopus, Web of Science), applying inclusion/exclusion criteria based on scope constraints defined in {additional_information}, and critically appraising study quality. You focus on extracting key information related to {keywords}, identifying seminal works, mapping research trends, and gathering citation metrics, using other information from {additional_information} to understand the field's nuances.",
+            "goal": "Conduct a structured literature review on {research_topic}, identifying 15-25 key publications related to {keywords} within the scope constraints defined in {additional_information}. Extract core findings, methodologies, and citation data. Incorporate other information from {additional_information} for context.",
+            "llm": "?llmodel",
+            "max_iter": 10,
+            "memory": true,
+            "role": "Systematic Literature Review Specialist",
+            "tools": [
+                {
+                "description": "A tool that can be used to search the internet with a search_query.",
+                "id": "builtin:SerperDevTool",
+                "name": "SerperDevTool"
+                },
+                {
+                "description": "A tool that can be used to semantic search a query from a specific URL content.",
+                "id": "builtin:WebsiteSearchTool",
+                "name": "WebsiteSearchTool"
+                }
+            ],
+        "verbose": true
+        },
+        {
+            "name":"synthesis_agent",
+            "allow_delegation": false,
+            "backstory": "You are a skilled Scientific Communicator and Synthesizer with expertise in creating accessible yet comprehensive summaries of complex fields like {research_topic}. You transform detailed literature reviews and analyses into coherent narratives. You define key concepts clearly, illustrate major themes related to {keywords}, highlight critical knowledge gaps and future directions identified within the scope constraints defined in {additional_information}, and discuss the broader implications, incorporating other insights from {additional_information}. Your output is a polished, informative overview suitable for researchers, students, or strategists.",
+            "goal": "Synthesize the literature review and analysis into a comprehensive, well-structured overview of {research_topic}. Clearly articulate the current state of knowledge, key concepts ({keywords}), major themes, gaps, trends, and implications, adhering to scope constraints defined in {additional_information} and incorporating other information from {additional_information}.",
+            "llm": "?llmodel",
+            "max_iter": 10,
+            "memory": true,
+            "role": "Topic Overview & Knowledge Synthesizer",
+            "tools": [
+                {
+                "description": "A tool that can be used to search the internet with a search_query.",
+                "id": "builtin:SerperDevTool",
+                "name": "SerperDevTool"
+                },
+                {
+                "description": "A tool that can be used to semantic search a query from a specific URL content.",
+                "id": "builtin:WebsiteSearchTool",
+                "name": "WebsiteSearchTool"
+                }
+            ],
+        "verbose": true
+        },
+        {
+        "name": "reference_builder",
+        "role": "Reference Metadata Specialist",
+        "goal": "Extract complete and accurate metadata (title, authors, organisation) from every URL in the researcher_links.json file. Build a properly formatted references table. Read the researcher_links.json file to get all URLs and titles discovered during research. Extract complete metadata for every URL using the URL Metadata Extractor tool. Ensure each URL is relevant to the {research_topic}.\n\nFor each URL in the file:\n1. Use the URL Metadata Extractor tool to fetch metadata\n2. Record the Title, Authors, Organisation, and URL\n3. Number references sequentially starting from 1\n\nBuild a references table with all the extracted details in this format:\n\n## References\n\n| Ref # | Title | Authors | Organisation | URL |\n|-------|-------|---------|--------------|-----|\n| 1     | [Full title of first source] | [Author names, comma-separated] | [Publishing organization or institution] | [Complete URL] |\n| 2     | [Full title of second source] | [Author names, comma-separated] | [Publishing organization or institution] | [Complete URL] |\n\nHere is a concrete example of the correct format:\n\n## References\n\n| Ref # | Title | Authors | Organisation | URL |\n|-------|-------|---------|--------------|-----|\n| 1     | AI in Healthcare: A Review | Smith, J.; Doe, A. | Stanford Medicine | https://example.com/ai-healthcare |\n| 2     | Machine Learning Applications | Brown, K. | MIT Press | https://example.com/ml-apps | ",
+        "backstory": "You are a bibliographic specialist who excels at extracting accurate metadata from web sources. You use the URL Metadata Extractor tool to systematically fetch information from each URL discovered by the researcher, ensuring all references have complete and accurate details for academic citation. Ensure validated URL's are relevant to the given {research_topic}",
+        "tools": [
+          {
+            "id": "urn:sd-core:crewai.builtin.urlMetadataExtractor"
+          }
+        ],
+        "memory": true,
+        "allow_delegation": false,
+        "verbose": true,
+        "max_iter": 30
+      }
+        ],
+        "tasks": [
+        {
+            "agent": "literature_reviewer",
+            "async_execution": false,
+            "description": "Conduct a structured literature review on {research_topic}, focusing on {keywords} within the scope constraints defined in {additional_information}. Incorporate other information from {additional_information}.Detailed steps:1. Define search strings combining {research_topic}, {keywords}, and terms related to scope constraints from {additional_information} (e.g., date ranges, study types).2. Execute searches across relevant databases (e.g., PubMed, Scopus, Web of Science, Google Scholar).3. Screen titles/abstracts based on relevance to {keywords} and adherence to scope constraints from {additional_information}.4. Retrieve full texts for potentially relevant articles.5. Apply final inclusion/exclusion criteria based on scope constraints from {additional_information} (e.g., only peer-reviewed, specific methodology, within date range). Aim for 15-25 key publications.6. For included publications, extract key information: Full Citation, DOI, Core Findings related to {keywords}, Methodology used, Study Limitations (briefly), Key Conclusions.7. Note any particularly influential papers (e.g., highly cited, seminal reviews) identified during the process or from {additional_information}.8. Organize extracted data in a structured format.",
+            "expected_output": "# Structured Literature Review: {research_topic} ({keywords})\n\n## 1. Search Strategy & Selection\n- **Databases Searched:** [List]\n- **Example Search Strings:** [Examples]\n- **Scope Constraints Applied (from {additional_information}):** [e.g., Peer-reviewed articles, 2015-Present, Human studies only]\n- **Screening Results:** [Number identified, screened, included]\n\n## 2. Included Publications (15-25 Key Studies)\n| Pub ID | Full Citation                                          | DOI    | Core Findings related to {keywords}                     | Methodology     | Stated Limitations   | Key Conclusion(s) | Notes (e.g., Seminal, from {additional_information}) |\n|--------|--------------------------------------------------------|--------|-------------------------------------------------------|-----------------|--------------------|-------------------|---------------------------------------------------|\n| P01    | Author A et al. (Year). Title. Journal. Vol(Iss):pp. | [Link] | Finding X relevant to one of the {keywords}         | RCT             | Small sample size  | Conclusion Y      | Highly cited                                      |\n| P02    | Author B et al. (Year). Title. Journal. Vol(Iss):pp. | [Link] | Finding Z relevant to one or more of the {keywords} | Meta-analysis | Heterogeneity    | Conclusion W      | Referenced in {additional_information}            |\n| ...    | ...                                                    | ...    | ...                                                   | ...             | ...                | ...               | ...                                               |\n\n## 3. Bibliography\n[P01] Full citation...\n[P02] Full citation...\n...\n\nValidation Rules:\n- Search strategy and selection criteria (scope constraints from {additional_information}) must be clearly documented.\n- 15-25 key publications relevant to {research_topic} and {keywords} must be included.\n- Each entry must include full citation, DOI, core findings ({keywords}), methodology, limitations, and conclusion.\n- Core findings must specifically relate to the provided {keywords}.\n- All DOIs must be valid links.\n- Bibliography must list all included publications.\n- Notes indicating seminal works or insights from {additional_information} should be included.",
+            "name": "Literature Review Task",
+            "tools": []
+        },
+        {
+        "agent": "analysis_agent",
+        "async_execution": false,
+        "description": "Analyze the Literature Review Task findings for {research_topic} ({keywords}), identifying themes, gaps, trends, and controversies within the scope constraints defined in {additional_information}. Incorporate other information from {additional_information}.Detailed steps:1. Review the extracted data from the Literature Review Task.2. Group findings related to specific {keywords} or sub-topics.3. **Thematic Analysis:** Identify 3-5 major recurring themes or areas of focus within the literature concerning {research_topic} and {keywords}. Describe each theme and cite supporting publications (Pub IDs). Publication URLs must be in the reference_details output. 4. **Gap Analysis:** Identify significant unanswered questions, methodological limitations across studies, or under-researched aspects of {research_topic} related to {keywords} within the scope constraints defined in {additional_information}.5. **Trend Analysis:** Analyze the publication timeline (if relevant within scope constraints from {additional_information}) to identify emerging trends, shifts in focus, or changes in methodology related to {keywords}.6. **Controversy/Debate Identification:** Note any significant areas where findings conflict, interpretations differ, or debates exist within the literature regarding {keywords}. Cite opposing studies.7. Synthesize the analysis, considering the context provided by {additional_information}.",
+        "expected_output": "# Research Analysis & Synthesis: {research_topic} ({keywords})\n\n## 1. Major Themes Identified\n### Theme 1: [Name of Theme related to {keywords}]\n- **Description:** [Brief explanation of the theme]\n- **Supporting Publications:** [P01, P05, P12, ...]\n- **Key Insights:** [Summary of what the literature shows regarding this theme]\n### Theme 2: [Name of Theme related to {keywords}]\n- **Description:** [... Description ...]\n- **Supporting Publications:** [P02, P06, P15, ...]\n- **Key Insights:** [... Summary ...]\n*(Repeat for 3-5 Themes)*\n\n## 2. Identified Research Gaps & Limitations\n| Gap/Limitation ID | Description                                           | Potential Impact                          | Supporting Evidence (e.g., common limitation in P0X, P0Y) | Suggested Research Opportunity   |\n|-------------------|-------------------------------------------------------|-------------------------------------------|---------------------------------------------------------|----------------------------------|\n| GAP-01            | Lack of longitudinal studies related to {keywords}    | Limits understanding of long-term effects | Mentioned in P01, P08                                   | Conduct prospective cohort study |\n| GAP-02            | Inconsistent methodologies for measuring [aspect related to {keywords}] | Difficult to compare results across studies | Method sections of P03, P07, P11                      | Develop standardized protocol    |\n| ...               | ...                                                   | ...                                       | ...                                                     | ...                              |\n\n## 3. Emerging Trends\n| Trend ID | Description of Trend (related to {keywords})                | Supporting Evidence (e.g., increased publications since YYYY, shift in focus in P18, P20) | Potential Future Implications   |\n|----------|-----------------------------------------------------------|-----------------------------------------------------------------------------------|-------------------------------|\n| TRND-01  | Growing use of AI in analyzing [aspect of {research_topic}] | P18, P20, {additional_information} mention                                        | Faster analysis, new insights |\n| TRND-02  | Increased focus on [specific sub-population/condition]      | P19, P22                                                                          | More targeted interventions   |\n| ...      | ...                                                       | ...                                                                               | ...                           |\n\n## 4. Key Controversies/Debates\n| Issue ID | Description of Controversy/Debate ({keywords})     | Conflicting Viewpoints/Findings                | Supporting Publications (Opposing Views) | Current Status/Consensus (if any) |\n|----------|--------------------------------------------------|------------------------------------------------|------------------------------------------|-----------------------------------|\n| DEB-01   | Role of [specific aspect related to {keywords}] in [process] | View A: Significant role; View B: Minor role | View A: [P04, P09]; View B: [P11, P16] | Unresolved; more research needed  |\n| ...      | ...                                              | ...                                            | ...                                      | ...                               |\n\n## 5. Synthesis Notes on Scope Constraints & Additional Information\nHow the defined scope constraints in {additional_information} shaped the analysis, and how other information from {additional_information} provided context or influenced interpretation.\n\nValidation Rules:\n- Must identify and describe 3-5 major themes related to {keywords} with supporting publication IDs.\n- Must identify specific research gaps or common limitations with supporting evidence and potential opportunities.\n- Must identify emerging trends related to {keywords} with supporting evidence.\n- Must identify key controversies/debates with evidence for differing views.\n- Analysis must explicitly consider scope constraints defined in {additional_information}.\n- Role of other information in {additional_information} in the analysis must be noted.\n- All claims must be traceable back to the included publications.",
+        "name": "Research Analysis Task",
+        "context": ["Literature Review Task"] 
+        },
+        {
+        "name": "reference_details",
+        "description": "Read the researcher_links.json file. It has all URLs and corresponding page titles discovered during research. Extract complete metadata for every URL in researcher_links.json. Validate that it is related to the given {research_topic}.",
+        "expected_output": "A properly formatted markdown References table with Ref #, Title, Authors, Organisation, and URL columns for all URLs discovered during research.",
+        "agent": "reference_builder",
+        "context": ["Research Analysis Task"]
+        },
+        {
+        "agent": "synthesis_agent",
+        "async_execution": false,
+        "description": "Synthesize the literature review and analysis into a comprehensive overview of {research_topic}, focusing on {keywords} and the scope constraints and other information provided in {additional_information}. Use the output from reference_details task for building references. The references must be exactly as specified in the reference_details. steps:1. Review the Literature Review and Research Analysis task outputs.2. Structure the overview logically (e.g., Introduction, Key Concepts, Major Themes, Gaps & Future Directions, Conclusion).3. **Introduction:** Briefly define {research_topic}, state the overview's purpose and scope constraints from {additional_information}, and highlight the importance of understanding aspects related to {keywords}.4. **Key Concepts:** Define essential terms and concepts central to {research_topic}, particularly those related to {keywords}.5. **Major Themes:** Summarize the 3-5 major themes identified in the analysis, explaining the main findings and significance for each theme related to {keywords}.6. **Current State & Gaps:** Provide a synthesized view of the current state of knowledge regarding {research_topic} and {keywords}. Clearly articulate the major research gaps and limitations identified.7. **Emerging Trends & Future Directions:** Discuss the identified trends and controversies. Suggest potential future research directions based on the analysis.8. **Implications:** Briefly discuss the broader implications of the current knowledge (and gaps) for the field, policy, or practice, considering other information in {additional_information}.9. **Conclusion:** Provide a concise summary of the topic overview.10. Compile a final bibliography of the key papers referenced throughout the overview.",
+        "expected_output": "# Comprehensive Overview: {research_topic} ({keywords})\n\n## 1. Introduction\n- Definition and importance of {research_topic}.\n- Scope of this overview (scope constraints from {additional_information}).\n- Significance of focusing on {keywords}.\n\n## 2. Key Concepts & Definitions\n- **Concept 1 (related to {keywords}):** [Clear definition and relevance]\n- **Concept 2 (related to {keywords}):** [Clear definition and relevance]\n- ... (Define other essential concepts)\n\n## 3. Major Research Themes related to {keywords}\n- **Theme 1: [Name]** - [Synthesized summary of key findings and significance, referencing analysis points/Pub IDs implicitly].\n- **Theme 2: [Name]** - [Synthesized summary...].\n- **Theme 3-5: [Name(s)]** - [Synthesized summaries...].\n\n## 4. Current State of Knowledge & Identified Gaps\n- **Synthesized Understanding:** [Paragraph summarizing what is generally known or accepted about {research_topic} concerning {keywords}, based on the themes].\n- **Major Knowledge Gaps:** [Bulleted or paragraph summary of key gaps identified in analysis (GAP-01, GAP-02, etc.), emphasizing unanswered questions related to {keywords}].\n- **Methodological Limitations:** [Brief summary of common limitations noted across studies].\n\n## 5. Emerging Trends & Future Directions\n- **Key Trends:** [Paragraph summarizing identified trends (TRND-01, etc.) and their potential impact on the field related to {keywords}].\n- **Ongoing Debates:** [Brief mention of key controversies (DEB-01, etc.) and what they signify].\n- **Future Research Priorities:** [Suggested directions based on gaps and trends, e.g., \"Future studies should focus on... using methodology Y\"].\n\n## 6. Broader Implications\n[Discussion of significance for science, policy, practice, industry, etc., informed by other information in {additional_information}].\n\n## 7. Conclusion\nConcise summary reiterating the main points regarding the current understanding, gaps, and future of {research_topic} concerning {keywords} within the scope constraints defined in {additional_information}.\n\n## 8. Key References\n[List of 10-15 most critical publications (Pub IDs and full citation) referenced or summarized in the overview].\n\nValidation Rules:\n- Overview must provide a coherent narrative synthesizing previous tasks.\n- Key concepts related to {keywords} must be clearly defined.\n- Major themes identified in the analysis must be summarized concisely.\n- Current state of knowledge, major gaps, and future directions must be clearly articulated.\n- Emerging trends and debates should be discussed.\n- The overview must adhere to the scope constraints defined in {additional_information}.\n- Implications section should consider other context from {additional_information}.\n- A bibliography of key references must be included.\n- Content must be accurate and reflect the findings of the literature review and analysis.",
+        "name": "Topic Synthesis Task",
+        "context": ["Literature Review Task", "Research Analysis Task", "reference_details"] 
+        }
+    ]
+    },
+    "artifact": "urn:ivcap:artifact:c4013b18-fc0a-405c-ae9e-b77182c22000",
+    "id": "urn:sd:crewai:crew.topic_overview",
+    "name": "Topic Overview",
+    "placeholders": [
+        "keywords",
+        "research_topic",
+        "additional_information"
+    ],
+    "process": "sequential",
+    "summary": "**Purpose**: Conducts systematic literature review and creates comprehensive topic overviews through structured analysis, synthesis, and knowledge mapping for research domains. **Inputs**: research_topic (domain of interest), keywords (specific focus areas), additional_information (scope constraints/context/date ranges). **Process**: (1) Conducts structured literature review across academic databases to identify 15-25 key publications with systematic screening and data extraction based on scope constraints, (2) analyzes literature findings to identify 3-5 major themes, research gaps, emerging trends, and controversies with evidence mapping and pattern recognition, (3) synthesizes review and analysis into comprehensive topic overview with clear definitions, thematic summaries, gap identification, and future research directions. **Outputs**: Structured literature review with curated publication database and citation analysis, research analysis report with themes, gaps, trends, and controversy identification, comprehensive topic overview with knowledge synthesis and strategic insights.",
+    "verbose": 2,
+    "version": "1.1.1",
+    "inputs": {
+    "research_topic": "research_topic:Objective: Synthesize literature and datasets to determine if the Pilbara region of Western Australia has experienced wetter or drier conditions in the last 15 years (2009–2024) compared to the previous 40 years (1969–2009), and identify known drivers of any documented climatic changes or trends. Methodology: Systematic review across academic literature (climate journals, regional government reports, meteorological agency data) focusing on (a) rainfall and hydrological data, (b) large-scale phenomena influencing Pilbara climate (e.g. Indian Ocean Dipole, ENSO), and (c) anthropogenic factors. Deliverables: Curated database of key studies and reports, synthesis of major themes, identification of controversy or uncertainty, initial gap analysis. Success Criteria: Comprehensive, referenced overview of historic and recent Pilbara rainfall trends and climate drivers.",
+    "keywords": "",
+    "additional_information": ""
+  }
+}

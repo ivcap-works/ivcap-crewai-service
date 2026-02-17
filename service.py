@@ -32,6 +32,7 @@ import os
 import time
 from pathlib import Path
 from typing import Optional, Union
+from dotenv import load_dotenv
 
 # Disable telemetry BEFORE importing CrewAI
 os.environ["OTEL_SDK_DISABLED"] = "true"
@@ -57,7 +58,12 @@ from llm_factory import get_llm_factory
 from artifact_manager import ArtifactManager
 from ivcap_langgraph_tool import create_langgraph_tool
 
+from tools.search import WebsiteSearchToolWithLinks, SerperDevToolWithLinks
+from tools.url_metadata_extractor import URLMetadataExtractor
+from tools.reference_validator import ReferenceValidationTool
+
 # Initialize logging
+load_dotenv(".env.local")
 logging_init("./logging.json")
 logger = getLogger("app")
 
@@ -142,7 +148,7 @@ class CrewResponse(BaseModel):
 add_supported_tools({
     # SerperDevTool - web search (requires SERPER_API_KEY)
     "urn:sd-core:crewai.builtin.serperDevTool":
-        lambda _, ctxt: SerperDevTool(),
+        lambda _, ctxt: SerperDevToolWithLinks(links_file=f"{ctxt.tmp_dir}/runs/{ctxt.job_id}/researcher_links.json"),
 
     # ScrapeWebsiteTool - scrape any website during execution
     # Can be initialized with specific URL or dynamically scrape any site
@@ -169,9 +175,32 @@ add_supported_tools({
     "urn:sd-core:crewai.builtin.fileReadTool":
         lambda _, ctxt: FileReadTool(file_path=ctxt.inputs_dir or "."),
 
-    # WebsiteSearchTool - semantic search with vector embeddings
+    # WebsiteSearchTool - semantic search with vector embeddings (saves links to file)
     "urn:sd-core:crewai.builtin.websiteSearchTool":
-        lambda _, ctxt: WebsiteSearchTool(config=ctxt.vectordb_config),
+        lambda _, ctxt: WebsiteSearchToolWithLinks(
+            config=ctxt.vectordb_config,
+            links_file=f"{ctxt.tmp_dir}/runs/{ctxt.job_id}/website_links.json",
+            collection_name=f"crew_{ctxt.job_id}",
+        ),
+
+    # URL Metadata Extractor - fetches URL and extracts metadata using Claude
+    "urn:sd-core:crewai.builtin.urlMetadataExtractor":
+        lambda _, ctxt: URLMetadataExtractor(
+            jwt_token=ctxt.jwt_token,
+            litellm_proxy_url=os.getenv("LITELLM_PROXY_URL"),
+            model="claude-sonnet-4-5-20250929", 
+            metadata_file=f"{ctxt.tmp_dir}/runs/{ctxt.job_id}/url_metadata.json"
+        ),
+
+    # Reference Validator - validates references against researcher's sources
+    "urn:sd-core:crewai.builtin.referenceValidationTool":
+        lambda _, ctxt: ReferenceValidationTool(
+            url_metadata_extractor=URLMetadataExtractor(
+                jwt_token=ctxt.jwt_token,
+                litellm_proxy_url=os.getenv("LITELLM_PROXY_URL")
+            ),
+            default_links_file=f"{ctxt.tmp_dir}/runs/{ctxt.job_id}/researcher_links.json"
+        ),
 
     # IVCAP LangGraph Deep Research Tool - comprehensive web research agent
     "urn:ivcap:service:dcdc770b-d276-5df5-b5b7-babf17fa6eb7":
@@ -391,14 +420,17 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
             if hasattr(jobCtxt.request, '__dict__'):
                 logger.debug(f"JobContext.request attributes: {list(jobCtxt.request.__dict__.keys())}")
 
+        # Get base directory from environment (default: /tmp)
+        runs_base_dir = os.getenv("IVCAP_RUNS_BASE_DIR", "/tmp")
+
         if jwt_token:
             logger.info(f"✓ JWT token detected for LLM authentication (length: {len(jwt_token)})")
-            os.environ["CREWAI_STORAGE_DIR"] = f"runs/{jobCtxt.job_id}"
-            logger.info(f"✓ Set CREWAI_STORAGE_DIR for complete job isolation")
+            os.environ["CREWAI_STORAGE_DIR"] = f"{runs_base_dir}/runs/{jobCtxt.job_id}"
+            logger.info(f"✓ Set CREWAI_STORAGE_DIR for complete job isolation: {os.environ['CREWAI_STORAGE_DIR']}")
         else:
             logger.warning("✗ No JWT token found - LLM calls will fall back to direct OpenAI API")
-            os.environ["CREWAI_STORAGE_DIR"] = f"runs/{jobCtxt.job_id}"
-            logger.info(f"✓ Set CREWAI_STORAGE_DIR for job isolation (no JWT)")
+            os.environ["CREWAI_STORAGE_DIR"] = f"{runs_base_dir}/runs/{jobCtxt.job_id}"
+            logger.info(f"✓ Set CREWAI_STORAGE_DIR for job isolation (no JWT): {os.environ['CREWAI_STORAGE_DIR']}")
 
         # ==================== STEP 2: ARTIFACTS ====================
         ivcap = jobCtxt.ivcap
@@ -624,10 +656,11 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         start_time = (time.process_time(), time.time())
 
         # Create outputs directory
-        outputs_dir = Path(f"runs/{jobCtxt.job_id}/outputs")
+        outputs_dir = Path(f"{runs_base_dir}/runs/{jobCtxt.job_id}/outputs")
         outputs_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"Created outputs directory: {outputs_dir}")
-
+        req.inputs["job_id"] = jobCtxt.job_id
+        req.inputs["runs_base_dir"] = runs_base_dir
         crew_result = crew.kickoff(req.inputs)
 
         end_time = (time.process_time(), time.time())
@@ -696,9 +729,19 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
 
     finally:
         # ==================== CLEANUP ====================
-        # Always cleanup artifacts, even on failure
+        # Always cleanup artifacts and temporary files, even on failure
         if inputs_dir:
             artifact_mgr.cleanup()
+
+        # Clean up researcher links file (used for reference validation)
+        runs_base_dir = os.getenv("IVCAP_RUNS_BASE_DIR", "/tmp")
+        links_file = Path(f"{runs_base_dir}/runs/{jobCtxt.job_id}/researcher_links.json")
+        if links_file.exists():
+            try:
+                links_file.unlink()
+                logger.info(f"Cleaned up researcher links file: {links_file}")
+            except Exception as e:
+                logger.warning(f"Failed to cleanup links file: {e}")
 
 
 # ============================================================================
