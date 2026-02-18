@@ -47,10 +47,10 @@ from pydantic import BaseModel, Field, ConfigDict
 from crewai import LLM
 from crewai.types.usage_metrics import UsageMetrics
 from crewai_tools import DirectoryReadTool, DirectorySearchTool, FileReadTool, PDFSearchTool, SerperDevTool, ScrapeWebsiteTool, WebsiteSearchTool
-
 from ivcap_service import getLogger, Service, JobContext, get_secret
 from ivcap_ai_tool import start_tool_server, ToolOptions, ivcap_ai_tool, logging_init
 from ivcap_client import IVCAP
+from ivcap_client.exception import ResourceNotFound
 
 from service_types import CrewA, TaskResponse, add_supported_tools
 from llm_factory import get_llm_factory
@@ -103,10 +103,10 @@ class CrewRequest(BaseModel):
     )
 
     # Optional features
-    artifact_urns: Optional[list[str]] = Field(
+    context_urns: Optional[list[str]] = Field(
         None,
-        description="IVCAP artifact URNs to download as inputs",
-        alias="artifact-urns"
+        description="IVCAP Aspect URNs. Download the Artifact urn's using the Aspect URN's",
+        alias="context-urns"
     )
     additional_inputs: Optional[Union[str, list[str]]] = Field(
         None,
@@ -372,7 +372,7 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         Crew execution response with results
     """
     # Initialize managers
-    artifact_mgr = ArtifactManager(jobCtxt.job_id)
+    artifact_mgr = ArtifactManager(job_context=jobCtxt)
     citation_mgr = None
     inputs_dir = None
 
@@ -402,10 +402,10 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
 
         # ==================== STEP 2: ARTIFACTS ====================
         ivcap = jobCtxt.ivcap
-        if req.artifact_urns:
-            logger.info(f"Downloading {len(req.artifact_urns)} artifacts...")
+        if req.context_urns:
+            logger.info(f"Downloading {len(req.context_urns)} artifacts...")
             inputs_dir = artifact_mgr.download_artifacts(
-                req.artifact_urns,
+                req.context_urns,
                 ivcap
             )
 
@@ -431,8 +431,7 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
                     logger.warning("⚠ No recognized file types (PDF/TXT/MD/CSV) - DirectoryReadTool can list files")
             else:
                 logger.error("Artifact download failed")
-                raise RuntimeError(
-                    f"Failed to download {len(req.artifact_urns)} artifact(s). "
+                return ResourceNotFound( f"Failed to download {req.context_urns} artifact(s). "
                     f"Cannot proceed as crew may depend on these files. "
                     f"Check artifact URNs and permissions."
                 )
@@ -449,7 +448,7 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
 
         # ==================== STEP 4.5: SMART ARTIFACT HANDLING ====================
         artifact_knowledge_sources = []
-        if req.artifact_urns and inputs_dir:
+        if req.context_urns and inputs_dir:
             from service_types import ToolA
 
             inputs_path = Path(inputs_dir)
