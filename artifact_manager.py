@@ -71,7 +71,8 @@ def get_dataset_property(aspect_urn: str, authorization: str, property_name: str
     token = authorization.split("Bearer ")[1]
     ivcap_client = IVCAP(url=IVCAP_URL, token=token)
     aspect = Aspect(ivcap=ivcap_client, id=aspect_urn)
-    val = aspect.content.get('content', {}).get(property_name)
+    val = aspect.content.get(property_name)
+    logger.info("Aspect content %s", aspect.content)
     logger.info("Aspect %s with %s: %s found", aspect, property_name, val)
     return val
 
