@@ -30,6 +30,7 @@ Changes:
 import datetime
 import os
 import time
+import shutil
 from pathlib import Path
 from typing import Optional, Union
 from dotenv import load_dotenv
@@ -188,8 +189,9 @@ add_supported_tools({
         lambda _, ctxt: URLMetadataExtractor(
             jwt_token=ctxt.jwt_token,
             litellm_proxy_url=os.getenv("LITELLM_PROXY_URL"),
-            model="claude-sonnet-4-5-20250929", 
-            metadata_file=f"{ctxt.tmp_dir}/runs/{ctxt.job_id}/url_metadata.json"
+            model="gemini-2.5-pro",
+            job_folder=f"{ctxt.tmp_dir}/runs/{ctxt.job_id}",
+            metadata_file=f"{ctxt.tmp_dir}/runs/{ctxt.job_id}/url_metadata.json",
         ),
 
     # Reference Validator - validates references against researcher's sources
@@ -735,13 +737,13 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
 
         # Clean up researcher links file (used for reference validation)
         runs_base_dir = os.getenv("IVCAP_RUNS_BASE_DIR", "/tmp")
-        links_file = Path(f"{runs_base_dir}/runs/{jobCtxt.job_id}/researcher_links.json")
-        if links_file.exists():
+        job_dir = Path(f"{runs_base_dir}/runs/{jobCtxt.job_id}/")
+        if os.path.exists(job_dir):
             try:
-                links_file.unlink()
-                logger.info(f"Cleaned up researcher links file: {links_file}")
-            except Exception as e:
-                logger.warning(f"Failed to cleanup links file: {e}")
+                shutil.rmtree(job_dir)
+                logger.info("Contents of directory %s removed successfully.", job_dir)
+            except OSError:
+                logger.exception("Error when deleting job dir %s", job_dir)
 
 
 # ============================================================================

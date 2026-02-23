@@ -31,7 +31,7 @@ def create_vectordb_config(job_id: str, jwt_token) -> dict:
     
     # Create ChromaDB client with persistent storage
     client = chromadb.PersistentClient(path=str(persist_dir))
-    embedding_function = OpenAIEmbeddingFunction(api_key=jwt_token, model_name="text-embedding-3-small", api_base=os.getenv("OPENAI_BASE_URL"))
+    embedding_function = OpenAIEmbeddingFunction(api_key=jwt_token, model_name="text-embedding-3-large", api_base=os.getenv("OPENAI_BASE_URL"))
     # Return config format expected by crewai-tools
     config = {
         "vectordb": {

@@ -5,132 +5,143 @@ Uses Claude's web_fetch tool to fetch URLs and extract metadata.
 
 import json
 import os
-from typing import Type, Optional, List, Dict
+from urllib.parse import urlparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Type, Optional, Dict
 from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
-from anthropic import Anthropic
+from google.genai import Client, types
+from openai import OpenAI
 
 from ivcap_service import getLogger
 
 logger = getLogger(__name__)
 
-# import httpx
-# from anthropic import Anthropic, DefaultHttpxClient
-
-# client = Anthropic(
-#     http_client=DefaultHttpxClient(
-#         proxy="http://my.test.proxy.example.com",
-#         transport=httpx.HTTPTransport(local_address="0.0.0.0"),
-#     ),
-# )
-
 class URLMetadataInput(BaseModel):
     """Input schema for URL metadata extraction"""
-    url: str = Field(
-        description="The URL to fetch and extract metadata from"
+    file_path: str = Field(
+        description="Path to a JSON file containing a list of objects, each with a 'url' field and optionally a 'title' field"
     )
     research_topic: str = Field(description="The user's research topic.")
-    title: Optional[str] = Field(
-        default=None,
-        description="Optional pre-populated title for the URL"
-    )
-
 
 class URLInfo(BaseModel):
-    """Structured information extracted from a URL"""
-    title: Optional[str] = Field(description="The title of the webpage, article, or paper", default="")
-    authors: Optional[List[str]] = Field(description="Comma-separated list of authors, or 'Not found' if unavailable", default_factory=list)
-    organisation: Optional[str] = Field(description="The publishing organization, institution, or website", default="")
-    inferred: bool = Field(default=False, description="The URL information is not inferred from web search")
+    title: str = Field(description="The title of the webpage, article, or paper", default="")
+    authors: list[str] = Field(description="Comma-separated list of authors, or 'Not found' if unavailable", default_factory=list)
+    organisation: str = Field(description="The publishing organization, institution, or website", default="")
+    url: str = Field(description="The url from web search or web fetch tool", default="")
+    confidence_scale: int = Field(description="The scale for how confident the model is about the result", default=1)
+
+METADATA_EXTRACTION="""You are a research assistant tasked with verifying the existence of a given URL. Additionally you will be extracting metadata from the given URL (web source). Your results must be accurate and reliable.  You will be given a URL and a research topic (mandatory) and optional list of ground truths that must be associated with the web page. The optional list of ground truths are [title, DOI, PMC id].
+You need to retrieve and validate metadata information using available web tools. Do NOT use your internal knowledge base to arrive at the response. 
+
+Here is the URL you need to investigate:
+
+<url>
+{url}
+</url>
+
+Here is the associated research topic:
+
+<research_topic>
+{research_topic}
+</research_topic>
+
+Optional Title of the page. If present, perform the Title validation otherwise skip the title validation
+<title>
+{title}
+</title>
+
+If DOI is in the URL path, then use DOI when analysing the page. If present, perform the DOI validation, otherwise skip the DOI validation.
+<doi>
+{doi}
+<doi>
+
+If PMC is present in the URL path, then use the PMC ID when analysing the page. If present, perform the PMC validation, otherwise skip the PMC validation. 
+<pmc>
+{pmc}
+</pmc>
+
+## Your Task
+
+Verify the given URL and extract metadata from the web page. You have access to `web_fetch` and `web_search` tools that you must use to retrieve information.
+
+## Step-by-Step Process
+
+Follow these steps in order:
+
+**Step 1:** Perform a Web Fetch using the given URL.
+
+**Step 2:** If Web Fetch returns results:
+- Proceed to Step 7
+- Otherwise proceed to Step 3
+
+**Step 3:** If Web Fetch does not return results, perform a Web Search using the given URL.
+
+**Step 4:** If Web Search does not return any results, proceed to Step 9. Otherwise proceed to Step 5.
+
+**Step 5:** If Web Search returns results, consider ONLY the first result. Discard all other results.
+
+**Step 6:** Check if the URL contains a DOI:
+- If the URL contains a DOI and the DOI does not exist in the search results, return "Not Found" immediately and proceed to Step 9.
+- Do not search beyond the provided results
+
+**Step 7: ** Before finalizing your response, perform Validation to ensure correctness and accuracy.
+- Validate that the webpage content is broadly relevant to the research topic
+- if title is present, validate that the title of your page starts with the given title
+- if the URL has a DOI, validate that the DOI is present and is the same as in your web page
+- If the URL has a PMC, validate the PMC is present and is exactly the same in your web page
+- If the result looks correct and relevant, extract the metadata
+
+** Step 8:** Extract Metadata
+Ensure the metadata is extract from a single webpage
+ 
+**Step 9:** If no valid results were found through either method, return "Not Found" as the response. 
+
+**Step 10:** Before finalizing your response:
+- If the result looks correct and relevant, extract the metadata
+- If not relevant, return "Not Found"
+
+## Metadata to Extract
+
+Extract the following information:
+
+1. **Title**: The main title of the article, paper, or webpage. Use "Not Found" if unavailable.
+2. **Authors**: Full names of all authors as a list. Use "Not Found" if unavailable.
+3. **Organization**: The publishing organization, institution, journal, or website name. Use "Not Found" if unavailable.
+4. **URL**: The URL of the web search or web fetch result page from which information was extracted.
+5. **confidence-scale**: How confident you are of the results in a scale of 1-5. 1 being lowest and 5 being highest
 
 
-METADATA_EXTRACTION = """You have access to web_fetch and web_search tool. Use it to fetch this URL and extract metadata:
+## Important Guidelines
 
-URL: {url}
+- Be thorough in your extraction: check meta tags, headers, bylines, and structured data
+- Only use information from the web tools; do not rely on your internal knowledge
+- Validate that page content is broadly relevant to the research topic
+- Optional validations such as title, doi, pmc can be associated with the web page.
+- When using web search, only consider the first result returned
 
-Extract the following information from the webpage:
-1. **Title**: The main title of the article, paper, or webpage
-2. **Authors**: Full names of all authors (comma-separated list)
-3. **Organization**: The publishing organization, institution, journal, or website
+## Output Format
+
+Before providing your final answer, document your step-by-step process inside <analysis> tags. It's OK for this section to be quite long. Include:
+
+- **Tool Usage**: Which tool(s) you used (web_fetch or web_search) and what happened
+- **Content Quotes**: Quote relevant snippets from the fetched or searched content that contain the metadata you're extracting
+- **Field-by-Field Extraction**: For each metadata field (title, authors, organization), explicitly note what you found or why it's "Not Found"
+- **Relevance Validation**: Explain how the content relates to the research topic, quoting specific passages that demonstrate relevance (or explain why it's not relevant)
+- **Confidence-scale**: Clearly state how confident you are of the URL validity as a result of the analysis.
+
+Then provide your final response as a JSON object with the following structure:
 
 Return the information in JSON format with the following keys:
+"title": "[extracted title or 'Not Found']",
+"authors": ["author1", "author2", "author3"] OR "Not Found",
+"organization": "[organization name or 'Not Found']",
+"url": "[URL from which meta data was extracted]",
+"confidence-scale": "integer , scale how confident you are of the results. [1-5]"
+"""
 
-Title: [extracted title]
-Authors: [author1, author2, author3] or "Not found"
-Organization: [organization name] or "Not found"
-
-Be thorough - check meta tags, headers, bylines, and structured data."""
-
-METADATA_EXTRACTION_v2 = """You have access to web_fetch and web_search tool. Use it to fetch this URL and extract metadata.
-If the URL is not directly accessible or if the URL from the search result is different from the provided URL, return "Not Found" instead. 
-
-URL: {url}
-Extract the page information after page is resolved . If you are unable to directly access the page, return  "Not found" for all keys 
-
-Extract the following information from the webpage:
-1. **Title**: The main title of the article, paper, or webpage or "Not Found" if page is not directly accessible
-2. **Authors**: Full names of all authors (comma-separated list) or "Not Found" if page is not directly accessible
-3. **Organization**: The publishing organization, institution, journal, or website or "Not Found" if page is not directly accessible
-4. Inferred: true/ false - (true if the metadata is inferred from related pages on the same website rather than extracted directly from the target URL., false otherwise)
-
-Return the information in JSON format with the following keys:
-
-title: [extracted title]
-authors: [author1, author2, author3] or "Not found"
-organization: [organization name] or "Not found"
-inferred: [true/false]
-
-Be thorough - check meta tags, headers, bylines, and structured data. Validate the correctness of your response before responding."""
-
-METADATA_EXTRACTION_v3="""You are provided with a research topic and a URL related to the topic. You have access to web fetch and web_search tool. You need to use them to look up metadata information about this URL.
-Verify that the data is related to the research topic. 
-Here is a step by step approach for metadata extraction. 
-1. Perform a Web Fetch using the given URL. 
-2. If you get results using Web Fetch, extract metadata directly. Respond with the provided metadata. Otherwise proceed to next step. 
-3. Perform a Web Search using the given URL.
-4. If the search results are returned, continue to next step. Otherwise proceed to step 7.
-4. If the search results are returned, consider only the first result. 
-5. If the first result looks correct, extract the required metadata.
-6. Discard all the other web results.
-7. Return with "Not Found". Do not query your internal knowledge base.
-8. Verify the result. Validate that the resulting webpage is relevant to the research topic. If the result looks correct, then extract metadata. 
-If the URL has a DOI and the DOI is not found or does not exist, return immediately. Do not look outside the given results.
-
-Search URL: {{url}}
-
-Associated Research topic- {{research_topic}}
-Extract the page information . Validate that the extracted data is related to the research topic.
-
-
-Extract the following information from the webpage:
-1. **Title**: The main title of the article, paper, or webpage or "Not Found" 
-2. **Authors**: Full names of all authors (comma-separated list) or "Not Found" 
-3. **Organization**: The publishing organization, institution, journal, or website or "Not Found" 
-4. **URL**: The url of the webpage from which information is extracted
-4. Inferred: true/ false - (true if the metadata is inferred from related pages on the same website rather than extracted directly from the target URL., false otherwise)
-
-Return the information in JSON format with the following keys:
-
-title: [extracted title]
-authors: [author1, author2, author3] or "Not found"
-organization: [organization name] or "Not found"
-inferred: [true/false]
-
-Be thorough - check meta tags, headers, bylines, and structured data. Validate the correctness of your response before responding."""
 
 tools = [
-    # {
-    #     "name": "get_url_metadata",
-    #     "description": "Returns url metadata from the message",
-    #     "input_schema": {
-    #         "type": "object",
-    #         "properties": {
-    #             "Title": {"type": "string"},
-    #             "Authors": {"type": "array", "items": { "type": "string" }},
-    #             "Organisation": {"type": "string"}
-    #         },
-    #     }
-    # },
     {
         "type": "web_search_20250305",
         "name": "web_search",
@@ -167,100 +178,129 @@ class URLMetadataExtractor(BaseTool):
     # JWT token for authentication (injected during tool creation)
     jwt_token: Optional[str] = Field(default=None, description="JWT token for LiteLLM proxy authentication")
     litellm_proxy_url: Optional[str] = Field(default=os.getenv("LITELLM_PROXY_URL"), description="LiteLLM proxy URL")
-    model: str = Field(default="claude-sonnet-4-5-20250929", description="Claude model to use")
+    model: str = Field(default="gemini-2.5-pro", description="LLM model to use")
     metadata_file: Optional[str] = Field(default=None, description="Path to JSON file where metadata will be saved")
     metadata_cache: Dict[str, Dict] = Field(default_factory=dict, description="Cache of extracted metadata")
-    url_count: int = Field(description="Total number of resolved references", default=0)
+    job_folder: str = Field(description="The folder where all documents for the job are kept")
 
-    def _run(self, url: str, research_topic: str, title: str = None) -> str:
+
+    def _run(self, file_path: str, research_topic: str) -> str:
         """
-        Fetch URL and extract metadata using Claude with web_fetch tool.
+        Fetch URL and extract metadata using Gemini with web_fetch tool.
 
         Args:
-            url: The URL to fetch and parse
+            file_path: Path to a JSON file containing 'url' and optionally 'title'
             research_topic: The user's research topic
-            title: the title of the web page as found by the search tool
 
         Returns:
             Formatted string with extracted metadata
         """
-        if not self.litellm_proxy_url:
-            return "Error: LiteLLM proxy URL not configured. Set LITELLM_PROXY_URL environment variable."
-        self.url_count += 1
-        result_dict = {
-            "URL": url,
-            "Title": "",
-            "Authors": "",
-            "Organization": "",
-            "Valid": False
-        }
-        if title:
-            result_dict["Title"] = title
-        # Create Anthropic client pointed at LiteLLM proxy
-        client = Anthropic(
-            # base_url=f"{proxy_url}",  # LiteLLM exposes Anthropic-compatible endpoint
-            # default_headers=default_headers,
-            api_key=os.getenv("ANTHROPIC_API_KEY")  # JWT passed as API key through proxy
-        )
-        is_valid = False
+        # if not self.litellm_proxy_url:
+        #     return "Error: LiteLLM proxy URL not configured. Set LITELLM_PROXY_URL environment variable."
+        file_path = f"{self.job_folder}/{file_path}"
+        logger.info("Reading file %s", file_path)
+        if not os.path.exists(file_path):
+            logger.info("%s file not found")
+            return []
         try:
-            # Get proxy URL (default to environment variable)
-            # Construct prompt for metadata extraction
-            # output_format={"type": "json_schema", "schema": URLInfo.model_json_schema()},
-            # Call Claude with web_fetch tool enabled
-            response = client.messages.parse(
-                model=self.model,
-                max_tokens=2000,
-                tools=tools,
-                messages=[
-                    {"role": "user", "content": METADATA_EXTRACTION_v3.format(url=url, research_topic=research_topic)}
-                ],
-                extra_headers={
-        "anthropic-beta": "web-fetch-2025-09-10"},
-        output_format=URLInfo
-        )
-            
-            # Extract and save metadata
-            url_info = response.parsed_output
-            if url_info and self.metadata_file:
-                if not url_info.inferred:
-                    if url_info.title and url_info.title.lower()!='not found':
-                        result_dict["Title"] = url_info.title
-                        is_valid = True
-                    if url_info.authors and url_info.authors.lower() != 'not found':
-                        result_dict["Authors"] = str(url_info.authors)
-                        is_valid = True
-                    if url_info.organisation and url_info.organisation.lower() !='not found':
-                        result_dict["Organization"] = url_info.organisation
-                        is_valid = True
-                    
-                # for content in result_text:
-                #     if content.type=='tool_use' and content.name=='get_url_metadata':
-                #         response_dict = content.input   
-                #         if "Title" in response_dict and not response_dict["Title"] == 'Not Found':
-                #             result_dict["Title"] = response_dict["Title"]
-                #         if "Organisation" in response_dict and not response_dict["Organisation"] == 'Not Found':
-                #             result_dict["Organisation"] = response_dict["Organisation"]
-                #         if "Authors" in response_dict and not response_dict["Authors"] == 'Not Found':
-                #             result_dict["Authors"] = response_dict["Authors"]
-            
+            with open(file_path, 'r') as f:
+                file_data = json.load(f)
+        except Exception:
+            logger.exception("Error reading %s", file_path)
+            return []
+        if "source_links" not in file_data:
+            logger.exception("Links not found %s", file_data)
+            return []
 
+        url_list = file_data.get("source_links", [])
+        if not url_list:
+            return f"Error: Expected a list of URL objects in {file_path}"
+        
+        to_be_validated = [item for item in url_list if item.get("url") not in self.metadata_cache]
+        client = Client(api_key=os.getenv("GEMINI_API_KEY", os.getenv("GOOGLE_API_KEY")))
+        to_be_validated = to_be_validated[:30]
+        logger.info("Validating %s URLS %s", len(to_be_validated), to_be_validated)
+        with ThreadPoolExecutor() as executor:
+            futures = {
+                executor.submit(self._fetch_url_metadata, client, entry, research_topic): entry
+                for entry in to_be_validated
+                if entry.get("url") or entry.get("URL")
+            }
+        
+            for future in as_completed(futures):
+                try:
+                    result_dict = future.result()
+                    if result_dict.confidence_scale==5:
+                        self.metadata_cache[result_dict.url] = result_dict.model_dump()
+                except Exception:
+                    logger.exception("Received exception ")
+                    continue
+            
+        self._save_metadata()
+        return self.metadata_cache
+
+    def _fetch_url_metadata(self, client: Client, entry: Dict, research_topic: str) -> URLInfo:
+        """Extract metadata for a single URL entry using the Anthropic API."""
+        url = entry.get("url") or entry.get("URL")
+        title = entry.get("title") or entry.get("Title")
+        tool_config = types.GenerateContentConfig(
+        tools=[types.Tool(google_search=types.GoogleSearch()), types.Tool(url_context=types.UrlContext())], temperature=0)
+        params = {
+        "url": url,
+        "title": title or "",
+        "doi": "",
+        "pmc": "",
+        "research_topic": research_topic
+        }
+        parsed_url = urlparse(url)
+
+        if "doi" in parsed_url.netloc.lower():
+            params["doi"] = parsed_url.path
+        if "pmc" in parsed_url.netloc.lower():
+            params["pmc"] = parsed_url.path
+        try:
+            # Uses the google genai client as the langchain client doesn't return grounding metadata
+            response = client.models.generate_content(
+                model=self.model,
+                contents=METADATA_EXTRACTION.format(**params),
+                config=tool_config)
+        except Exception as exp:
+            logger.exception("Exception during web research node %s", exp)
+            return URLInfo()
+
+        # logger.info(response.text)
+        if response.text:
+            try:
+                url_info = self._parse_response_with_openai(response.text)
+            except Exception:
+                logger.exception("Exception. Returning empty")
+                return URLInfo()
+            return url_info
+
+        return URLInfo()
+
+    def _parse_response_with_openai(self, response_text: str) -> URLInfo:
+        """Use OpenAI structured output to extract typed metadata from a raw Gemini response."""
+        openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        try:
+            completion = openai_client.beta.chat.completions.parse(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "Extract the metadata fields from the provided text into the structured format."},
+                    {"role": "user", "content": response_text}
+                ],
+                response_format=URLInfo
+            )
+            return completion.choices[0].message.parsed
         except Exception as e:
-            logger.exception("Error extracting metadata for url %s", url)
-            return f"Error extracting metadata from {url}: {str(e)}"
-        if is_valid:
-            result_dict["Valid"] = True
-            self.metadata_cache[str(self.url_count)] = result_dict
-            self._save_metadata()
-        else:
-            logger.info("%s URL could not be validated.", url)
-        return result_dict
+            logger.exception("Error parsing response with OpenAI for structured output")
+            return URLInfo()
 
     def _save_metadata(self):
         """Save metadata to JSON file, appending to existing metadata if file exists"""
         if not self.metadata_file:
             return
-
+        logger.info("Saving the metadata file")
         try:
             # Ensure directory exists
             os.makedirs(os.path.dirname(self.metadata_file), exist_ok=True)

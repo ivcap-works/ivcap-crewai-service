@@ -2,7 +2,7 @@
 
 import json
 import os
-from typing import Optional, Set, List, Dict
+from typing import Optional, Set, Dict
 from pydantic import Field
 
 from crewai_tools import WebsiteSearchTool, SerperDevTool
@@ -86,6 +86,8 @@ class WebsiteSearchToolWithLinks(WebsiteSearchTool):
             logger.exception("Error when invoking website search")
             raise
         else:
+            if website:
+                self.links.add(website)
             if self.links_file:
                 self._save_links()
 
@@ -114,6 +116,7 @@ class WebsiteSearchToolWithLinks(WebsiteSearchTool):
                 json.dump({
                     "source_links": sorted(list(self.links))
                 }, f, indent=2)
+                logger.info("Saving %s links to %s", self.links, self.links_file)
         except Exception as e:
             # Log error but don't fail the search
             logger.exception("Failed to save links to %s: %s", self.links_file, e)
@@ -205,8 +208,9 @@ class SerperDevToolWithLinks(SerperDevTool):
                     with open(self.links_file, 'r') as f:
                         existing_data = json.load(f)
                         existing_links = existing_data.get("source_links", {})
+                        saved_links = {link_dict.get("url"): link_dict.get("title") for link_dict in existing_links}
                         # Merge existing links with current links (current links take precedence)
-                        merged_links = {**existing_links, **self.links}
+                        merged_links = {**saved_links, **self.links}
                         self.links = merged_links
                 except (json.JSONDecodeError, KeyError) as e:
                     # If file is corrupted or invalid, proceed with current links
@@ -214,8 +218,9 @@ class SerperDevToolWithLinks(SerperDevTool):
 
             # Write merged links to file
             with open(self.links_file, 'w') as f:
+                link_dict = [{"url": link, "title": title} for link, title in self.links.items()]
                 json.dump({
-                    "source_links": self.links
+                    "source_links": link_dict
                 }, f, indent=2)
                 logger.info("Number of saved links %s", len(self.links))
         except Exception as e:
