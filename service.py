@@ -194,16 +194,6 @@ add_supported_tools({
             metadata_file=f"{ctxt.tmp_dir}/runs/{ctxt.job_id}/url_metadata.json",
         ),
 
-    # Reference Validator - validates references against researcher's sources
-    "urn:sd-core:crewai.builtin.referenceValidationTool":
-        lambda _, ctxt: ReferenceValidationTool(
-            url_metadata_extractor=URLMetadataExtractor(
-                jwt_token=ctxt.jwt_token,
-                litellm_proxy_url=os.getenv("LITELLM_PROXY_URL")
-            ),
-            default_links_file=f"{ctxt.tmp_dir}/runs/{ctxt.job_id}/researcher_links.json"
-        ),
-
     # IVCAP LangGraph Deep Research Tool - comprehensive web research agent
     "urn:ivcap:service:dcdc770b-d276-5df5-b5b7-babf17fa6eb7":
         create_langgraph_tool,
