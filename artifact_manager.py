@@ -14,7 +14,11 @@ from pathlib import Path
 from typing import List, Optional
 import shutil
 import os
-from ivcap_service import getLogger
+from functools import partial
+
+from ivcap_service import getLogger, JobContext
+from ivcap_client import IVCAP
+from ivcap_client.aspect import Aspect
 
 logger = getLogger("app.artifacts")
 
@@ -60,6 +64,23 @@ MIME_TO_EXT = {
     "application/javascript": ".js",
 }
 
+IVCAP_URL = os.environ.get("IVCAP_BASE_URL", "https://develop.ivcap.net")
+
+def get_dataset_property(aspect_urn: str, authorization: str, property_name: str):
+    """Retrieves properties from an IVCAP Dataset aspect"""
+    token = authorization.split("Bearer ")[1]
+    ivcap_client = IVCAP(url=IVCAP_URL, token=token)
+    aspect = Aspect(ivcap=ivcap_client, id=aspect_urn)
+    val = aspect.content.get(property_name)
+    logger.info("Aspect content %s", aspect.content)
+    logger.info("Aspect %s with %s: %s found", aspect, property_name, val)
+    return val
+
+
+get_artifact_urn = partial(get_dataset_property, property_name="artifactUrn")
+
+get_project_urn = partial(get_dataset_property, property_name="projectUrn")
+
 
 class ArtifactManager:
     """
@@ -78,19 +99,18 @@ class ArtifactManager:
         # ... use artifacts ...
         mgr.cleanup()  # Remove all artifacts
     """
-
-    def __init__(self, job_id: str):
+    
+    def __init__(self, job_context: JobContext):
         """
         Initialize manager for specific job.
 
         Args:
             job_id: IVCAP job identifier (e.g., "urn:ivcap:job:uuid")
         """
-        self.job_id = job_id
-        # Get base directory from environment variable (default: /tmp)
-        base_dir_root = os.getenv("IVCAP_RUNS_BASE_DIR", "/tmp")
-        self.base_dir = Path(base_dir_root) / "runs" / job_id
+        self.job_id = job_context.job_id
+        self.base_dir = Path(f"runs/{self.job_id}")
         self.inputs_dir = self.base_dir / "inputs"
+        self.authorization = job_context.job_authorization
     
     def _get_filename_with_extension(
         self,
@@ -141,7 +161,7 @@ class ArtifactManager:
     
     def download_artifacts(
         self, 
-        artifact_urns: List[str], 
+        context_urns: List[str], 
         ivcap_client
     ) -> Optional[str]:
         """
@@ -157,7 +177,7 @@ class ArtifactManager:
         Raises:
             Exception: If critical download error occurs
         """
-        if not artifact_urns:
+        if not context_urns:
             logger.info("No artifacts to download")
             return None
         
@@ -168,10 +188,11 @@ class ArtifactManager:
         try:
             downloaded_count = 0
             
-            for urn in artifact_urns:
+            for urn in context_urns:
                 try:
-                    logger.info(f"Downloading artifact: {urn}")
-                    artifact = ivcap_client.get_artifact(urn)
+                    artifact_urn = get_artifact_urn(aspect_urn=urn, authorization=self.authorization)
+                    logger.info(f"Downloading artifact: {artifact_urn}")
+                    artifact = ivcap_client.get_artifact(artifact_urn)
                     
                     # DEBUG: Inspect artifact attributes to find MIME type field
                     logger.info(f"  Artifact attributes: {dir(artifact)}")
@@ -223,7 +244,7 @@ class ArtifactManager:
                 self.cleanup()
                 return None
             
-            logger.info(f"Downloaded {downloaded_count}/{len(artifact_urns)} artifacts")
+            logger.info(f"Downloaded {downloaded_count}/{len(context_urns)} artifacts")
             return str(self.inputs_dir)
         
         except Exception as e:
