@@ -108,8 +108,7 @@ class ArtifactManager:
             job_id: IVCAP job identifier (e.g., "urn:ivcap:job:uuid")
         """
         self.job_id = job_context.job_id
-        self.base_dir = Path(f"runs/{self.job_id}")
-        self.inputs_dir = self.base_dir / "inputs"
+        self.inputs_dir = Path(f"{os.getenv("IVCAP_RUNS_BASE_DIR", "/tmp")}/runs/{self.job_id}/inputs")
         self.authorization = job_context.job_authorization
     
     def _get_filename_with_extension(
