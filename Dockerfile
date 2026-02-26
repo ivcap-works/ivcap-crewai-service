@@ -18,6 +18,7 @@ RUN poetry config virtualenvs.create false && poetry install --no-root
 # Get service files
 ADD service.py ivcap_tool.py service_types.py vectordb.py events.py logging.json utils.py llm_factory.py artifact_manager.py crew_builder.py ./
 ADD ivcap_langgraph_tool.py ./
+ADD tools/ ./tools/
 
 # So we can run it with --user
 RUN mkdir /data && chmod 777 /data
