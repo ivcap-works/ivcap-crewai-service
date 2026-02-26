@@ -17,21 +17,41 @@ from ivcap_service import getLogger
 
 logger = getLogger(__name__)
 
+LITELLM_PROXY = os.getenv("LITELLM_PROXY_URL")
+OPENAI_MODEL = os.getenv("LITELLM_DEFAULT_MODEL")
+GEMINI_MODEL = os.getenv("LITELLM_GEMINI_MODEL", "gemini-2.5-pro")
+
+
 class URLMetadataInput(BaseModel):
     """Input schema for URL metadata extraction"""
+
     file_path: str = Field(
         description="Path to a JSON file containing a list of objects, each with a 'url' field and optionally a 'title' field"
     )
     research_topic: str = Field(description="The user's research topic.")
 
-class URLInfo(BaseModel):
-    title: str = Field(description="The title of the webpage, article, or paper", default="")
-    authors: list[str] = Field(description="Comma-separated list of authors, or 'Not found' if unavailable", default_factory=list)
-    organisation: str = Field(description="The publishing organization, institution, or website", default="")
-    url: str = Field(description="The url from web search or web fetch tool", default="")
-    confidence_scale: int = Field(description="The scale for how confident the model is about the result", default=1)
 
-METADATA_EXTRACTION="""You are a research assistant tasked with verifying the existence of a given URL. Additionally you will be extracting metadata from the given URL (web source). Your results must be accurate and reliable.  You will be given a URL and a research topic (mandatory) and optional list of ground truths that must be associated with the web page. The optional list of ground truths are [title, DOI, PMC id].
+class URLInfo(BaseModel):
+    title: str = Field(
+        description="The title of the webpage, article, or paper", default=""
+    )
+    authors: list[str] = Field(
+        description="Comma-separated list of authors, or 'Not found' if unavailable",
+        default_factory=list,
+    )
+    organisation: str = Field(
+        description="The publishing organization, institution, or website", default=""
+    )
+    url: str = Field(
+        description="The url from web search or web fetch tool", default=""
+    )
+    confidence_scale: int = Field(
+        description="The scale for how confident the model is about the result",
+        default=1,
+    )
+
+
+METADATA_EXTRACTION = """You are a research assistant tasked with verifying the existence of a given URL. Additionally you will be extracting metadata from the given URL (web source). Your results must be accurate and reliable.  You will be given a URL and a research topic (mandatory) and optional list of ground truths that must be associated with the web page. The optional list of ground truths are [title, DOI, PMC id].
 You need to retrieve and validate metadata information using available web tools. Do NOT use your internal knowledge base to arrive at the response. 
 
 Here is the URL you need to investigate:
@@ -142,18 +162,138 @@ Return the information in JSON format with the following keys:
 
 
 tools = [
-    {
-        "type": "web_search_20250305",
-        "name": "web_search",
-        "max_uses": 1
-    },
+    {"type": "web_search_20250305", "name": "web_search", "max_uses": 1},
     {
         "type": "web_fetch_20250910",
         "name": "web_fetch",
         "max_uses": 5,
-        "citations": {"enabled": True}
-    }
+        "citations": {"enabled": True},
+    },
 ]
+
+
+class URLMetadataFetcher(BaseModel):
+    """
+    Fetches and validates URL metadata using Gemini with Google Search and URL context tools.
+
+    Handles the network and AI interactions independently of the CrewAI tool layer,
+    making it reusable outside of agent workflows.
+    """
+
+    model: str = Field(
+        default=GEMINI_MODEL, description="Gemini model to use for metadata extraction"
+    )
+
+    def validate_urls(
+        self, urls: list[dict], jwt_token: str, research_topic: str | None = None
+    ) -> Dict[str, dict]:
+        """
+        Validate a list of URL dicts and return high-confidence (confidence_scale==5) metadata.
+
+        Args:
+            urls: List of dicts with at least a 'url' key and optional 'title'
+            jwt_token: Token to use for LiteLLM
+            research_topic: Topic used to judge page relevance
+
+        Returns:
+            Dict mapping url -> metadata dict for each successfully validated URL
+        """
+        client = Client(
+            api_key=os.getenv("GEMINI_API_KEY", os.getenv("GOOGLE_API_KEY")),
+            http_options={"base_url": LITELLM_PROXY},
+        )
+        to_be_validated = urls[:30]
+        logger.info("Validating %s URLS %s", len(to_be_validated), to_be_validated)
+        results: Dict[str, dict] = {}
+        with ThreadPoolExecutor() as executor:
+            futures = {
+                executor.submit(
+                    self._fetch_url_metadata, client, entry, jwt_token, research_topic
+                ): entry
+                for entry in to_be_validated
+                if entry.get("url") or entry.get("URL")
+            }
+            for future in as_completed(futures):
+                try:
+                    url_info = future.result()
+                    if url_info.confidence_scale == 5:
+                        results[url_info.url] = url_info.model_dump()
+                except Exception:
+                    logger.exception("Received exception")
+        return results
+
+    def _fetch_url_metadata(
+        self, client: Client, entry: Dict, jwt_token: str, research_topic: str
+    ) -> URLInfo:
+        """Extract metadata for a single URL entry using the Gemini API."""
+        url = entry.get("url") or entry.get("URL")
+        title = entry.get("title") or entry.get("Title")
+        tool_config = types.GenerateContentConfig(
+            tools=[
+                types.Tool(google_search=types.GoogleSearch()),
+                types.Tool(url_context=types.UrlContext()),
+            ],
+            temperature=0,
+        )
+        litellm_url = LITELLM_PROXY
+        gemini_url = litellm_url.split("/v1")[0]
+        tool_config.http_options = {
+            "headers": {"Authorization": f"Bearer {jwt_token}"},
+            "base_url": gemini_url,
+        }
+
+        params = {
+            "url": url,
+            "title": title or "",
+            "doi": "",
+            "pmc": "",
+            "research_topic": research_topic,
+        }
+        parsed_url = urlparse(url)
+        if "doi" in parsed_url.netloc.lower():
+            params["doi"] = parsed_url.path
+        if "pmc" in parsed_url.netloc.lower():
+            params["pmc"] = parsed_url.path
+
+        try:
+            # Uses the google genai client as the langchain client doesn't return grounding metadata
+            response = client.models.generate_content(
+                model=self.model,
+                contents=METADATA_EXTRACTION.format(**params),
+                config=tool_config,
+            )
+        except Exception as exp:
+            logger.exception("Exception during web research node %s", exp)
+            return URLInfo()
+
+        if response.text:
+            try:
+                return self._parse_response_with_openai(response.text, jwt_token)
+            except Exception:
+                logger.exception("Exception. Returning empty")
+                return URLInfo()
+        return URLInfo()
+
+    def _parse_response_with_openai(self, response_text: str, jwt_token) -> URLInfo:
+        """Use OpenAI structured output to extract typed metadata from a raw Gemini response."""
+        openai_client = OpenAI(api_key=jwt_token, base_url=LITELLM_PROXY)
+        try:
+            completion = openai_client.beta.chat.completions.parse(
+                model=OPENAI_MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Extract the metadata fields from the provided text into the structured format.",
+                    },
+                    {"role": "user", "content": response_text},
+                ],
+                response_format=URLInfo,
+            )
+            return completion.choices[0].message.parsed
+        except Exception:
+            logger.exception("Error parsing response with OpenAI for structured output")
+            return URLInfo()
+
 
 class URLMetadataExtractor(BaseTool):
     """
@@ -176,13 +316,25 @@ class URLMetadataExtractor(BaseTool):
     args_schema: Type[BaseModel] = URLMetadataInput
 
     # JWT token for authentication (injected during tool creation)
-    jwt_token: Optional[str] = Field(default=None, description="JWT token for LiteLLM proxy authentication")
-    litellm_proxy_url: Optional[str] = Field(default=os.getenv("LITELLM_PROXY_URL"), description="LiteLLM proxy URL")
-    model: str = Field(default="gemini-2.5-pro", description="LLM model to use")
-    metadata_file: Optional[str] = Field(default=None, description="Path to JSON file where metadata will be saved")
-    metadata_cache: Dict[str, Dict] = Field(default_factory=dict, description="Cache of extracted metadata")
-    job_folder: str = Field(description="The folder where all documents for the job are kept")
-
+    jwt_token: Optional[str] = Field(
+        default=None, description="JWT token for LiteLLM proxy authentication"
+    )
+    litellm_proxy_url: Optional[str] = Field(
+        default=os.getenv("LITELLM_PROXY_URL"), description="LiteLLM proxy URL"
+    )
+    fetcher: URLMetadataFetcher = Field(
+        default_factory=URLMetadataFetcher,
+        description="Handles URL fetching and metadata extraction",
+    )
+    metadata_file: Optional[str] = Field(
+        default=None, description="Path to JSON file where metadata will be saved"
+    )
+    metadata_cache: Dict[str, Dict] = Field(
+        default_factory=dict, description="Cache of extracted metadata"
+    )
+    job_folder: str = Field(
+        description="The folder where all documents for the job are kept"
+    )
 
     def _run(self, file_path: str, research_topic: str) -> str:
         """
@@ -195,15 +347,13 @@ class URLMetadataExtractor(BaseTool):
         Returns:
             Formatted string with extracted metadata
         """
-        # if not self.litellm_proxy_url:
-        #     return "Error: LiteLLM proxy URL not configured. Set LITELLM_PROXY_URL environment variable."
         file_path = f"{self.job_folder}/{file_path}"
         logger.info("Reading file %s", file_path)
         if not os.path.exists(file_path):
             logger.info("%s file not found")
             return []
         try:
-            with open(file_path, 'r') as f:
+            with open(file_path, "r") as f:
                 file_data = json.load(f)
         except Exception:
             logger.exception("Error reading %s", file_path)
@@ -215,86 +365,14 @@ class URLMetadataExtractor(BaseTool):
         url_list = file_data.get("source_links", [])
         if not url_list:
             return f"Error: Expected a list of URL objects in {file_path}"
-        
-        to_be_validated = [item for item in url_list if item.get("url") not in self.metadata_cache]
-        client = Client(api_key=os.getenv("GEMINI_API_KEY", os.getenv("GOOGLE_API_KEY")))
-        to_be_validated = to_be_validated[:30]
-        logger.info("Validating %s URLS %s", len(to_be_validated), to_be_validated)
-        with ThreadPoolExecutor() as executor:
-            futures = {
-                executor.submit(self._fetch_url_metadata, client, entry, research_topic): entry
-                for entry in to_be_validated
-                if entry.get("url") or entry.get("URL")
-            }
-        
-            for future in as_completed(futures):
-                try:
-                    result_dict = future.result()
-                    if result_dict.confidence_scale==5:
-                        self.metadata_cache[result_dict.url] = result_dict.model_dump()
-                except Exception:
-                    logger.exception("Received exception ")
-                    continue
-            
+
+        to_be_validated = [
+            item for item in url_list if item.get("url") not in self.metadata_cache
+        ]
+        new_metadata = self.fetcher.validate_urls(to_be_validated, research_topic)
+        self.metadata_cache.update(new_metadata)
         self._save_metadata()
         return self.metadata_cache
-
-    def _fetch_url_metadata(self, client: Client, entry: Dict, research_topic: str) -> URLInfo:
-        """Extract metadata for a single URL entry using the Anthropic API."""
-        url = entry.get("url") or entry.get("URL")
-        title = entry.get("title") or entry.get("Title")
-        tool_config = types.GenerateContentConfig(
-        tools=[types.Tool(google_search=types.GoogleSearch()), types.Tool(url_context=types.UrlContext())], temperature=0)
-        params = {
-        "url": url,
-        "title": title or "",
-        "doi": "",
-        "pmc": "",
-        "research_topic": research_topic
-        }
-        parsed_url = urlparse(url)
-
-        if "doi" in parsed_url.netloc.lower():
-            params["doi"] = parsed_url.path
-        if "pmc" in parsed_url.netloc.lower():
-            params["pmc"] = parsed_url.path
-        try:
-            # Uses the google genai client as the langchain client doesn't return grounding metadata
-            response = client.models.generate_content(
-                model=self.model,
-                contents=METADATA_EXTRACTION.format(**params),
-                config=tool_config)
-        except Exception as exp:
-            logger.exception("Exception during web research node %s", exp)
-            return URLInfo()
-
-        # logger.info(response.text)
-        if response.text:
-            try:
-                url_info = self._parse_response_with_openai(response.text)
-            except Exception:
-                logger.exception("Exception. Returning empty")
-                return URLInfo()
-            return url_info
-
-        return URLInfo()
-
-    def _parse_response_with_openai(self, response_text: str) -> URLInfo:
-        """Use OpenAI structured output to extract typed metadata from a raw Gemini response."""
-        openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        try:
-            completion = openai_client.beta.chat.completions.parse(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": "Extract the metadata fields from the provided text into the structured format."},
-                    {"role": "user", "content": response_text}
-                ],
-                response_format=URLInfo
-            )
-            return completion.choices[0].message.parsed
-        except Exception as e:
-            logger.exception("Error parsing response with OpenAI for structured output")
-            return URLInfo()
 
     def _save_metadata(self):
         """Save metadata to JSON file, appending to existing metadata if file exists"""
@@ -308,19 +386,23 @@ class URLMetadataExtractor(BaseTool):
             # If file exists, load existing metadata and merge
             if os.path.exists(self.metadata_file):
                 try:
-                    with open(self.metadata_file, 'r') as f:
+                    with open(self.metadata_file, "r") as f:
                         existing_data = json.load(f)
                         existing_metadata = existing_data.get("url_metadata", {})
                         # Merge with current cache
                         self.metadata_cache = existing_metadata | self.metadata_cache
                 except (json.JSONDecodeError, KeyError) as e:
-                    logger.exception("Warning: Could not read existing metadata from %s: %s" , self.metadata_file, e)
+                    logger.exception(
+                        "Warning: Could not read existing metadata from %s: %s",
+                        self.metadata_file,
+                        e,
+                    )
 
             # Write merged metadata to file
-            with open(self.metadata_file, 'w') as f:
-                json.dump({
-                    "url_metadata": self.metadata_cache
-                }, f, indent=2)
+            with open(self.metadata_file, "w") as f:
+                json.dump({"url_metadata": self.metadata_cache}, f, indent=2)
                 logger.info("No of links updated %s", len(self.metadata_cache))
         except Exception as e:
-            logger.exception("Warning: Failed to save metadata to %s: %s ", self.metadata_file, e)
+            logger.exception(
+                "Warning: Failed to save metadata to %s: %s", self.metadata_file, e
+            )

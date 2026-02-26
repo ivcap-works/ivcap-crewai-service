@@ -1,0 +1,13 @@
+{
+  "$schema": "urn:sd-core:schema.crewai.request.1",
+  "name": "Brainstorming Solutions from Document Analysis",
+  "crew-ref": "urn:sd:crewai:crew.brainstorming_copilot",
+  "inputs": {
+    "research_topic": "In the 'Executive Summary' section, what is the exact, verbatim definition of an 'AI system'?, What are the four specific function names that make up the 'AI RMF Core'?,In Section 1.2.2 regarding 'Risk Tolerance', what does the document state about how risk tolerance is likely to change for AI systems? ",
+    "keywords": "brainstorm, multiple options, explore alternatives",
+    "additional_information": ""
+  },
+  "context-urns": [
+    "urn:ivcap:aspect:0aef125e-d47d-4037-b419-1d52cd24c850"
+  ]
+}

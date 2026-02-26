@@ -40,5 +40,6 @@ ENV OPENAI_BASE_URL=https://mindweaver.develop.ivcap.io/litellm/v1
 ENV LITELLM_PROXY_URL=https://mindweaver.develop.ivcap.io/litellm/v1
 ENV LITELLM_DEFAULT_MODEL=gpt-4.1
 ENV LITELLM_FALLBACK_MODEL=gpt-4o
+ENV LITELLM_GEMINI_MODEL=gemini-2.5-pro
 
 ENTRYPOINT ["python", "/app/service.py", "--port", "80"]
