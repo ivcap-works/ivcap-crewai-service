@@ -7,7 +7,7 @@
 
 ## ⚠️ **Important: Request Format**
 
-The service expects a **request wrapper** around your crew definition:
+This service is a **CrewAI runner** that executes various CrewAI crew definitions. Each crew definition can have different valid inputs (called "placeholders" in crew definitions). The service expects a **request wrapper** around your crew definition:
 
 **WRONG** ❌ (sending crew JSON directly):
 ```bash
@@ -29,13 +29,93 @@ curl -d '{
 **Request Schema**:
 ```json
 {
-  "name": "execution_name",           // Required
-  "inputs": {"key": "value"},         // Optional variables
-  "crew": {...},                      // Option 1: Inline crew definition
-  "crew-ref": "urn:ivcap:aspect:...", // Option 2: Reference to stored crew
-  "artifact-urns": ["urn:..."]        // Optional: Download artifacts
+  "name": "execution_name",                      // Required
+  "inputs": {"key": "value"},                    // Optional variables (varies by crew - see below)
+  "crew": {...},                                 // Option 1: Inline crew definition
+  "crew-ref": "urn:sd:crewai:crew.deepresearch", // Option 2: Reference to stored crew
+  "artifact-urns": ["urn:..."]                   // Optional: Download artifacts
 }
 ```
+
+> **Note**: Valid inputs depend on the specific crew definition being executed. See the [Determining Valid Inputs](#-determining-valid-inputs) section below to learn how to find which inputs a crew expects.
+
+---
+
+## 📝 Determining Valid Inputs
+
+This service is a **CrewAI runner** that executes various CrewAI crew definitions. Each crew definition can have different valid inputs.
+
+### Terminology
+
+- **Service Request**: Uses `inputs` (dictionary of key-value pairs)
+- **Crew Definition**: Uses `placeholders` (array of placeholder names)
+- **These are the same thing** - placeholders in the crew definition correspond to input keys in the service request
+
+### How to Find Valid Inputs
+
+To determine which inputs are valid for a specific crew, query the IVCAP Aspect that contains the crew definition:
+
+```bash
+curl -X GET "https://develop.ivcap.net/1/aspects/urn:ivcap:aspect:YOUR_ASPECT_URN" \
+  -H 'accept: application/json' \
+  -H "Authorization: Bearer $IVCAP_TOKEN"
+```
+
+The response will include a `placeholders` array in the `content` field:
+
+```json
+{
+  "id": "urn:ivcap:aspect:1a32a472-ba89-49ac-8bf2-9434c8dff2a0",
+  "entity": "urn:sd:crewai:crew.deepresearch",
+  "schema": "urn:sd:schema:icrew-crew.1",
+  "content": {
+    "$entity": "urn:sd:crewai:crew.deepresearch",
+    "$schema": "urn:sd:schema:icrew-crew.1",
+    "placeholders": [
+      "research_topic",
+      "keywords",
+      "additional_information"
+    ],
+    ...
+  }
+}
+```
+
+These placeholder names (e.g., `research_topic`) are what you use as keys in your `inputs` dictionary. They will be substituted wherever `{research_topic}` appears in the crew definition (agent goals, task descriptions, etc.).
+
+### Example: Complete Working Request
+
+Here's a complete example showing how to execute a crew with valid inputs:
+
+```bash
+curl -i -X POST \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer ${IVCAP_TOKEN}" \
+    --data '{
+  "name": "dan_test",
+  "inputs": {
+    "research_topic": "Top AI Trends in Software Engineering in last 3 months",
+    "keywords": "AI, Software",
+    "additional_information": ""
+  },
+  "crew-ref": "urn:sd:crewai:crew.deepresearch",
+  "artifact-urns": []
+}' \
+    "https://develop.ivcap.net/1/services2/urn:ivcap:service:YOUR_SERVICE_URN/jobs"
+```
+
+**Response** (202 Accepted with retry-later pattern):
+
+```json
+{
+  "$schema": "urn:ivcap:schema.service.retry-later",
+  "job-id": "urn:ivcap:job:a91bc99b-ceb3-443a-af3a-714a6d6c7881",
+  "location": "https://develop.ivcap.net/1/services2/.../jobs/a91bc99b-ceb3-443a-af3a-714a6d6c7881",
+  "retry-later": 10
+}
+```
+
+The service returns a 202 Accepted response with a `job-id` and `location` where you can check the job status.
 
 ---
 
