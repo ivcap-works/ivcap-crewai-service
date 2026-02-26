@@ -18,3 +18,4 @@ examples/litellm_*.log
 test_results_*
 .gitignore
 .DS_Store
+CLAUDE.md
