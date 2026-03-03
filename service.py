@@ -362,12 +362,12 @@ def create_authenticated_llm(
     model_override = inputs.get("llm_model") if inputs else None
 
     llm = factory.create_llm(
-        jwt_token=jwt_token, model=model_override, temperature=0.7, max_tokens=4000
+        jwt_token=jwt_token, model=model_override, temperature=0.7,
     )
 
     # Create planning LLM (same model, same auth)
     planning_llm = factory.create_llm(
-        jwt_token=jwt_token, model=model_override, temperature=0.7, max_tokens=4000
+        jwt_token=jwt_token, model=model_override, temperature=0.7,
     )
 
     # Create embedder configuration if using litellm proxy
