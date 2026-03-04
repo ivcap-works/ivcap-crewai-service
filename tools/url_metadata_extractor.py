@@ -199,7 +199,7 @@ class URLMetadataFetcher(BaseModel):
             Dict mapping url -> metadata dict for each successfully validated URL
         """
         client = Client(
-            api_key=os.getenv("GEMINI_API_KEY", os.getenv("GOOGLE_API_KEY")),
+            api_key=jwt_token,
             http_options={"base_url": LITELLM_PROXY},
         )
         to_be_validated = urls[:30]
