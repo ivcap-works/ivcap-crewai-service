@@ -12,7 +12,7 @@ import chromadb
 from chromadb.config import Settings
 from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
 
-
+BASE_DIR = os.getenv("IVCAP_RUNS_BASE_DIR", "/tmp")
 def create_vectordb_config(job_id: str, jwt_token) -> dict:
     """
     Create vectordb configuration for CrewAI tools.
@@ -26,12 +26,12 @@ def create_vectordb_config(job_id: str, jwt_token) -> dict:
         Configuration dict for CrewAI tools (WebsiteSearchTool, etc.)
     """
     # Create job-specific directory for ChromaDB
-    persist_dir = Path(f"runs/{job_id}")
+    persist_dir = Path(f"{BASE_DIR}/runs/{job_id}")
     persist_dir.mkdir(parents=True, exist_ok=True)
     
     # Create ChromaDB client with persistent storage
     client = chromadb.PersistentClient(path=str(persist_dir))
-    embedding_function = OpenAIEmbeddingFunction(api_key=jwt_token, model_name="text-embedding-3-small", api_base=os.getenv("OPENAI_BASE_URL"))
+    embedding_function = OpenAIEmbeddingFunction(api_key=jwt_token, model_name="text-embedding-3-large", api_base=os.getenv("OPENAI_BASE_URL"))
     # Return config format expected by crewai-tools
     config = {
         "vectordb": {

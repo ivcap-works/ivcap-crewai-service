@@ -54,18 +54,24 @@ class Context():
     - Optional artifacts directory
     - Optional JWT for authentication
     - Optional LLM factory for custom models
-    
+
     Updated: Added job_id and optional fields for artifact/JWT support
+    Updated: tmp_dir now configurable via IVCAP_RUNS_BASE_DIR environment variable (default: /tmp)
     """
     vectordb_config: dict
     job_id: str
-    tmp_dir: str = "/tmp"
-    
+    tmp_dir: str = None  # Set from IVCAP_RUNS_BASE_DIR environment variable
+
     # Optional features (backward compatible)
     inputs_dir: Optional[str] = None
     jwt_token: Optional[str] = None
     llm_factory: Optional[Any] = None
     citation_manager: Optional[Any] = None
+
+    def __post_init__(self):
+        """Set tmp_dir from environment variable if not provided"""
+        if self.tmp_dir is None:
+            self.tmp_dir = os.getenv("IVCAP_RUNS_BASE_DIR", "/tmp")
 
 supported_tools = {}
 def add_supported_tools(tools: dict[str, Callable[['ToolA'], BaseTool]]):

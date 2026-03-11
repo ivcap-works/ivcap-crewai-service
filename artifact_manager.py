@@ -85,12 +85,14 @@ get_project_urn = partial(get_dataset_property, property_name="projectUrn")
 class ArtifactManager:
     """
     Manages artifact lifecycle for a specific job.
-    
+
     Directory structure:
-        runs/{job_id}/
+        {IVCAP_RUNS_BASE_DIR}/runs/{job_id}/
             inputs/           # Downloaded artifacts
             chroma.sqlite3    # VectorDB (managed separately)
-    
+
+    The base directory is configurable via IVCAP_RUNS_BASE_DIR environment variable (default: /tmp)
+
     Usage:
         mgr = ArtifactManager(job_id="urn:ivcap:job:123...")
         inputs_dir = mgr.download_artifacts(["urn:ivcap:artifact:abc"], ivcap_client)
@@ -101,13 +103,12 @@ class ArtifactManager:
     def __init__(self, job_context: JobContext):
         """
         Initialize manager for specific job.
-        
+
         Args:
             job_id: IVCAP job identifier (e.g., "urn:ivcap:job:uuid")
         """
         self.job_id = job_context.job_id
-        self.base_dir = Path(f"runs/{self.job_id}")
-        self.inputs_dir = self.base_dir / "inputs"
+        self.inputs_dir = Path(f"{os.getenv('IVCAP_RUNS_BASE_DIR', '/tmp')}/runs/{self.job_id}/inputs")
         self.authorization = job_context.job_authorization
     
     def _get_filename_with_extension(

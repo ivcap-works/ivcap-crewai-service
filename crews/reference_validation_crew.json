@@ -1,0 +1,81 @@
+{
+  "$schema": "urn:sd-core:schema.crewai.request.1",
+  "name": "Reference Validation Crew",
+  "inputs": {
+    "topic": "research_topic:Objective: Synthesize literature and datasets to determine if the Pilbara region of Western Australia has experienced wetter or drier conditions in the last 15 years (2009–2024) compared to the previous 40 years (1969–2009), and identify known drivers of any documented climatic changes or trends. Methodology: Systematic review across academic literature (climate journals, regional government reports, meteorological agency data) focusing on (a) rainfall and hydrological data, (b) large-scale phenomena influencing Pilbara climate (e.g. Indian Ocean Dipole, ENSO), and (c) anthropogenic factors. Deliverables: Curated database of key studies and reports, synthesis of major themes, identification of controversy or uncertainty, initial gap analysis. Success Criteria: Comprehensive, referenced overview of historic and recent Pilbara rainfall trends and climate drivers."
+  },
+  "crew": {
+    "agents": [
+      {
+        "name": "researcher",
+        "role": "Research Specialist",
+        "goal": "Research {topic} and document ALL source links discovered during research. Every website you search will be automatically saved to a links file for validation.",
+        "backstory": "You are a meticulous researcher who explores multiple credible sources. You use the website search tool to investigate academic papers, industry reports, and expert analyses. Each source you search is automatically tracked for later reference validation.",
+        "tools": [
+          {
+            "id": "urn:sd-core:crewai.builtin.serperDevTool",
+            "opts": {
+              "safesearch": "off"
+            }
+          }
+        ],
+        "memory": true,
+        "allow_delegation": false,
+        "verbose": true,
+        "max_iter": 15
+      },
+      {
+        "name": "reference_builder",
+        "role": "Reference Metadata Specialist",
+        "goal": "Extract complete and accurate metadata (title, authors, organisation) from every URL in the researcher_links.json file to build a properly formatted references table. Read the researcher_links.json file to get all URLs and titles discovered during research. Extract complete metadata for every URL using the URL Metadata Extractor tool.\n\nFor each URL in the file:\n1. Use the URL Metadata Extractor tool to fetch metadata\n2. Record the Title, Authors, Organisation, and URL\n3. Number references sequentially starting from 1\n\nBuild a references table with all the extracted details in this format:\n\n## References\n\n| Ref # | Title | Authors | Organisation | URL |\n|-------|-------|---------|--------------|-----|\n| 1     | [Full title of first source] | [Author names, comma-separated] | [Publishing organization or institution] | [Complete URL] |\n| 2     | [Full title of second source] | [Author names, comma-separated] | [Publishing organization or institution] | [Complete URL] |\n\nHere is a concrete example of the correct format:\n\n## References\n\n| Ref # | Title | Authors | Organisation | URL |\n|-------|-------|---------|--------------|-----|\n| 1     | AI in Healthcare: A Review | Smith, J.; Doe, A. | Stanford Medicine | https://example.com/ai-healthcare |\n| 2     | Machine Learning Applications | Brown, K. | MIT Press | https://example.com/ml-apps | ",
+        "backstory": "You are a bibliographic specialist who excels at extracting accurate metadata from web sources. You use the URL Metadata Extractor tool to systematically fetch information from each URL discovered by the researcher, ensuring all references have complete and accurate details for academic citation.",
+        "tools": [
+          {
+            "id": "urn:sd-core:crewai.builtin.urlMetadataExtractor"
+          }
+        ],
+        "memory": true,
+        "allow_delegation": false,
+        "verbose": true,
+        "max_iter": 25
+      },
+      {
+        "name": "writer",
+        "role": "Academic Report Writer",
+        "goal": "Write a comprehensive report on {topic} with a properly formatted References section containing a markdown table with all cited sources",
+        "backstory": "You are an academic writer who creates well-structured reports with proper citations. You MUST include a 'References' section at the end with a markdown table. The table format is CRITICAL:\n\n## References\n\n| Ref # | Title | Authors | Organisation | URL |\n|-------|-------|---------|--------------|-----|\n| 1     | Article Title | Author Names | Publisher/Org | https://... |\n\nEnsure every source mentioned in the report appears in this table with complete metadata.",
+        "memory": true,
+        "allow_delegation": false,
+        "verbose": true,
+        "max_iter": 12
+      }
+    ],
+    "tasks": [
+      {
+        "name": "research_task",
+        "description": "Research comprehensive information about {topic}.\n\nYour research should cover:\n1. Latest developments and breakthroughs\n2. Key technologies and applications\n3. Leading researchers and organizations\n4. Current challenges and future directions\n\nIMPORTANT: Use the website search tool to explore multiple credible sources. Each website you search will automatically be saved to the researcher_links.json file.\n\nIn your output, provide:\n- Key findings organized by theme\n- Important facts, statistics, and insights\n- Context about the significance of developments\n\nThe sources you search will be used later to validate the writer's references.",
+        "expected_output": "Comprehensive research report with key findings about {topic}, organized by themes. All sources are automatically tracked via the website search tool.",
+        "agent": "researcher"
+      },
+      {
+        "name": "reference_details",
+        "description": "Read the researcher_links.json file to get all URLs and title discovered during research. Extract complete metadata for every URL",
+        "expected_output": "A properly formatted markdown References table with Ref #, Title, Authors, Organisation, and URL columns for all URLs discovered during research.",
+        "agent": "reference_builder",
+        "context": ["research_task"]
+      },
+      {
+        "name": "write_report_task",
+        "description": "Using the research findings from the research_task and the reference_details from the reference_builder, write a comprehensive academic report on {topic}.\n\nReport Structure (MANDATORY):\n\n1. **Introduction** (1 paragraph)\n   - Context and significance of the topic\n\n2. **Main Content** (3-4 paragraphs)\n   - Key developments and findings\n   - Important applications and use cases\n   - Leading organizations and researchers\n   - Current challenges\n\n3. **Future Outlook** (1 paragraph)\n   - Emerging trends and predictions\n\n4. **References** (CRITICAL FORMAT)\n\nYou MUST include a References section with this EXACT markdown table format:\n\n## References\n\n| Ref # | Title | Authors | Organisation | URL |\n| Extract the exact reference details to populate References section.",
+        "expected_output": "Your report MUST follow this exact structure:\n\n**1. Introduction (1 paragraph)**\n- Provide context for the topic\n- Explain the significance and relevance of the topic\n\n**2. Main Content (3-4 paragraphs)**\nYou should cover the following areas across 3-4 well-developed paragraphs:\n- Key developments and findings in the field\n- Important applications and use cases\n- Leading organizations and researchers contributing to this area\n- Current challenges and limitations\n\n**3. Future Outlook (1 paragraph)**\n- Discuss emerging trends\n- Provide predictions or future directions for the field\n\n**4. References Section (MANDATORY)**\n\nThis section is CRITICAL. You MUST include a References section at the end of your report using this EXACT markdown table format:\n\n## References\n\n| Ref # | Title | Authors | Organisation | URL |\n|-------|-------|---------|--------------|-----|\n| 1     | [Full title of first source] | [Author names, comma-separated] | [Publishing organization or institution] | [Complete URL] |\n| 2     | [Full title of second source] | [Author names, comma-separated] | [Publishing organization or institution] | [Complete URL] |\n\nHere is a concrete example of the correct format:\n\n## References\n\n| Ref # | Title | Authors | Organisation | URL |\n|-------|-------|---------|--------------|-----|\n| 1     | AI in Healthcare: A Review | Smith, J.; Doe, A. | Stanford Medicine | https://example.com/ai-healthcare |\n| 2     | Machine Learning Applications | Brown, K. | MIT Press | https://example.com/ml-apps |\n\nImportant requirements for the References section:\n- Include ALL sources from the research findings that you reference in your report\n- Each row should contain: a reference number, the complete title, all authors (separated by semicolons), the organization/institution, and the full URL\n- Maintain the exact table structure shown above with proper markdown formatting\n- Number references sequentially starting from 1\n\nAdditional guidelines:\n- Write in a formal, academic tone appropriate for a scholarly report\n- Base all content on the research findings provided - do not invent information\n- When referencing sources in the body of your report, you may use notation like [1], [2], etc. to correspond to the References table\n- Ensure your report is comprehensive and covers all major points from the research findings\n- Each paragraph should be substantive and well-developed\n\nWrite your complete report now, ensuring you include all required sections in the order specified above.",
+        "agent": "writer",
+        "context": ["research_task", "reference_details"]
+      }
+    ],
+    "memory": true,
+    "verbose": true,
+    "process": "sequential",
+    "planning": false,
+    "cache": true
+  }
+}
