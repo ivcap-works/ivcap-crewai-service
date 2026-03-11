@@ -50,7 +50,7 @@ class LLMFactory:
             litellm_proxy_url: Override proxy URL (defaults to env var)
         """
         self.litellm_proxy_url = (
-            litellm_proxy_url or os.getenv("LITELLM_PROXY_URL")
+            litellm_proxy_url or os.getenv("LITELLM_PROXY")
         )
         self.default_model = os.getenv("LITELLM_DEFAULT_MODEL", "gpt-4.1")
         self.fallback_model = os.getenv("LITELLM_FALLBACK_MODEL", "gpt-3.5-turbo")
@@ -163,7 +163,7 @@ class LLMFactory:
         # NO VALID CONFIGURATION
         raise ValueError(
             "No valid LLM configuration available. Please set:\n"
-            "  1. LITELLM_PROXY_URL with JWT authentication (preferred), OR\n"
+            "  1. LITELLM_PROXY with JWT authentication (preferred), OR\n"
             "  2. OPENAI_API_KEY for direct API access (fallback)\n"
             f"Current state: proxy={self.litellm_proxy_url}, "
             f"jwt={'present' if jwt_token else 'missing'}, "

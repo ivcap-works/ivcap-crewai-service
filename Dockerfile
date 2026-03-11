@@ -36,9 +36,6 @@ ENV VERSION=$VERSION
 # Command to run
 ENV CREWAI_STORAGE_DIR=/data
 ENV ANONYMIZED_TELEMETRY=False
-ENV IVCAP_BASE_URL=https://develop.ivcap.net
-ENV OPENAI_BASE_URL=https://mindweaver.develop.ivcap.io/litellm/v1
-ENV LITELLM_PROXY_URL=https://mindweaver.develop.ivcap.io/litellm/v1
 ENV LITELLM_DEFAULT_MODEL=gpt-4.1
 ENV LITELLM_FALLBACK_MODEL=gpt-4o
 ENV LITELLM_GEMINI_MODEL=gemini-2.5-pro

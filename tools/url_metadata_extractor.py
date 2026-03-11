@@ -17,7 +17,7 @@ from ivcap_service import getLogger
 
 logger = getLogger(__name__)
 
-LITELLM_PROXY = os.getenv("LITELLM_PROXY_URL")
+LITELLM_PROXY = os.getenv("LITELLM_PROXY")
 OPENAI_MODEL = os.getenv("LITELLM_DEFAULT_MODEL")
 GEMINI_MODEL = os.getenv("LITELLM_GEMINI_MODEL", "gemini-2.5-pro")
 
@@ -320,7 +320,7 @@ class URLMetadataExtractor(BaseTool):
         default=None, description="JWT token for LiteLLM proxy authentication"
     )
     litellm_proxy_url: Optional[str] = Field(
-        default=os.getenv("LITELLM_PROXY_URL"), description="LiteLLM proxy URL"
+        default=os.getenv("LITELLM_PROXY"), description="LiteLLM proxy URL"
     )
     fetcher: URLMetadataFetcher = Field(
         default_factory=URLMetadataFetcher,

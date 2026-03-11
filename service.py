@@ -193,7 +193,7 @@ add_supported_tools(
         # URL Metadata Extractor - fetches URL and extracts metadata using Claude
         "urn:sd-core:crewai.builtin.urlMetadataExtractor": lambda _, ctxt: URLMetadataExtractor(
             jwt_token=ctxt.jwt_token,
-            litellm_proxy_url=os.getenv("LITELLM_PROXY_URL"),
+            litellm_proxy_url=os.getenv("LITELLM_PROXY"),
             model="gemini-2.5-pro",
             job_folder=f"{ctxt.tmp_dir}/runs/{ctxt.job_id}",
             metadata_file=f"{ctxt.tmp_dir}/runs/{ctxt.job_id}/url_metadata.json",
