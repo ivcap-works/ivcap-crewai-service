@@ -70,7 +70,7 @@ from ivcap_langgraph_tool import create_langgraph_tool
 
 from tools.search import WebsiteSearchToolWithLinks, SerperDevToolWithLinks
 from tools.url_metadata_extractor import URLMetadataExtractor
-
+from download_manager import DownloadManager
 # Initialize logging
 load_dotenv()
 logging_init("./logging.json")
@@ -453,7 +453,8 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         ivcap = jobCtxt.ivcap
         if req.context_urns:
             logger.info(f"Downloading {len(req.context_urns)} artifacts...")
-            inputs_dir = artifact_mgr.download_artifacts(req.context_urns, ivcap)
+            download_mgr = DownloadManager(job_context=jobCtxt)
+            inputs_dir = download_mgr.download(req.context_urns)
 
             if inputs_dir:
                 # Inject inputs directory path into crew inputs
