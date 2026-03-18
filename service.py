@@ -56,7 +56,7 @@ from crewai_tools import (
     PDFSearchTool,
     SerperDevTool,
     ScrapeWebsiteTool,
-    WebsiteSearchTool,
+    JSONSearchTool,
 )
 from ivcap_service import getLogger, Service, JobContext, get_secret
 from ivcap_ai_tool import start_tool_server, ToolOptions, ivcap_ai_tool, logging_init
@@ -124,11 +124,6 @@ class CrewRequest(BaseModel):
         None,
         description="IVCAP Aspect URNs. Download the Artifact urn's using the Aspect URN's",
         alias="context-urns",
-    )
-    additional_inputs: Optional[Union[str, list[str]]] = Field(
-        None,
-        description="Previous crew outputs as markdown (string or list of strings)",
-        alias="additional-inputs",
     )
     enable_citations: Optional[bool] = Field(
         False, description="Enable citation tracking (experimental)"
@@ -201,6 +196,9 @@ add_supported_tools(
         # IVCAP LangGraph Deep Research Tool - comprehensive web research agent
         "urn:ivcap:service:dcdc770b-d276-5df5-b5b7-babf17fa6eb7": create_langgraph_tool,
         "urn:ivcap:langgraph:deep-research": create_langgraph_tool,  # Alias for convenience
+        "urn:sd-core:crewai.builtin.JSONSearchTool": lambda _, ctxt: JSONSearchTool(
+            collection_name=f"crew_{ctxt.job_id}"
+        ),
     }
 )
 
@@ -268,9 +266,6 @@ def get_auth_token(job_ctxt: JobContext) -> Optional[str]:
     # Path 1: job_authorization attribute (ivcap-ai-tool v0.7.17+)
     if hasattr(job_ctxt, "job_authorization"):
         token = job_ctxt.job_authorization
-        logger.debug(
-            f"Path 1 (job_authorization): token={repr(token)}, type={type(token)}, bool={bool(token)}"
-        )
         if token:
             # Remove "Bearer " prefix if present
             if isinstance(token, str) and token.startswith("Bearer "):
@@ -286,7 +281,6 @@ def get_auth_token(job_ctxt: JobContext) -> Optional[str]:
     # Path 2: Direct auth_token attribute (older versions)
     if hasattr(job_ctxt, "auth_token"):
         token = job_ctxt.auth_token
-        logger.debug(f"Path 2 (auth_token): token={repr(token)}, bool={bool(token)}")
         if token:
             logger.info(f"✓ JWT extracted from auth_token (length: {len(str(token))})")
             return token
@@ -295,7 +289,6 @@ def get_auth_token(job_ctxt: JobContext) -> Optional[str]:
     if hasattr(job_ctxt, "headers"):
         headers = job_ctxt.headers if isinstance(job_ctxt.headers, dict) else {}
         auth_header = headers.get("Authorization", "")
-        logger.debug(f"Path 3 (headers): Authorization={repr(auth_header)}")
         if auth_header.startswith("Bearer "):
             logger.info(f"✓ JWT extracted from headers (length: {len(auth_header)-7})")
             return auth_header[7:]  # Strip "Bearer " prefix
@@ -303,7 +296,6 @@ def get_auth_token(job_ctxt: JobContext) -> Optional[str]:
     # Path 4: Nested request object
     if hasattr(job_ctxt, "request") and hasattr(job_ctxt.request, "headers"):
         auth_header = job_ctxt.request.headers.get("Authorization", "")
-        logger.debug(f"Path 4 (request.headers): Authorization={repr(auth_header)}")
         if auth_header.startswith("Bearer "):
             logger.info(
                 f"✓ JWT extracted from request.headers (length: {len(auth_header)-7})"
@@ -406,29 +398,13 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         Crew execution response with results
     """
     # Initialize managers
-    artifact_mgr = ArtifactManager(job_context=jobCtxt)
+    download_mgr = DownloadManager(job_context=jobCtxt)
     citation_mgr = None
     inputs_dir = None
 
     try:
         # ==================== STEP 1: AUTHENTICATION ====================
         jwt_token = get_auth_token(jobCtxt)
-
-        # DEBUG: Log JobContext attributes to find where token actually is
-        logger.debug(f"JobContext attributes: {dir(jobCtxt)}")
-        if hasattr(jobCtxt, "headers"):
-            logger.debug(f"JobContext.headers: {jobCtxt.headers}")
-        if hasattr(jobCtxt, "request"):
-            logger.debug(f"JobContext.request type: {type(jobCtxt.request)}")
-            if hasattr(jobCtxt.request, "headers"):
-                logger.debug(
-                    f"JobContext.request.headers: {dict(jobCtxt.request.headers)}"
-                )
-            if hasattr(jobCtxt.request, "__dict__"):
-                logger.debug(
-                    f"JobContext.request attributes: {list(jobCtxt.request.__dict__.keys())}"
-                )
-
         # Get base directory from environment (default: /tmp)
         runs_base_dir = os.getenv("IVCAP_RUNS_BASE_DIR", "/tmp")
 
@@ -453,7 +429,7 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         ivcap = jobCtxt.ivcap
         if req.context_urns:
             logger.info(f"Downloading {len(req.context_urns)} artifacts...")
-            download_mgr = DownloadManager(job_context=jobCtxt)
+            
             inputs_dir = download_mgr.download(req.context_urns)
 
             if inputs_dir:
@@ -624,6 +600,14 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
                             logger.info(
                                 f"  → Auto-injected DirectorySearchTool into agent '{agent.name}'"
                             )
+                    if list(inputs_path.glob("*.json")):
+                        json_tool = ToolA(
+                            id="urn:sd-core:crewai.builtin.JSONSearchTool",
+                            name="JSONSearchTool",
+                            description="Searching within JSON file contents"
+                        )
+                        agent.tools.append(json_tool)
+                        logger.info("Adding Json Tool %s", agent.name)
 
             else:
                 logger.info(
@@ -685,22 +669,6 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         if artifact_knowledge_sources:
             knowledge_sources.extend(artifact_knowledge_sources)
 
-        # Process additional-inputs (previous crew outputs)
-        if req.additional_inputs:
-            logger.info("📚 Processing additional inputs as knowledge sources...")
-            from knowledge_processor import create_knowledge_sources_from_inputs
-
-            try:
-                additional_sources = create_knowledge_sources_from_inputs(
-                    req.additional_inputs
-                )
-                knowledge_sources.extend(additional_sources)
-                logger.info(
-                    f"✓ Created {len(additional_sources)} knowledge sources from additional inputs"
-                )
-            except Exception as e:
-                logger.error(f"Failed to process additional inputs: {e}", exc_info=True)
-
         if knowledge_sources:
             logger.info(
                 f"📚 Total knowledge sources for crew: {len(knowledge_sources)}"
@@ -753,6 +721,9 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         logger.info(f"Created outputs directory: {outputs_dir}")
         req.inputs["job_id"] = jobCtxt.job_id
         req.inputs["runs_base_dir"] = runs_base_dir
+        req.inputs["additional_information"] = ""
+        if req.context_urns and inputs_dir:
+            req.inputs["additional_information"] = "Read the files in the your directory to extract useful information."
         crew_result = crew.kickoff(req.inputs)
 
         end_time = (time.process_time(), time.time())
@@ -826,7 +797,7 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         # ==================== CLEANUP ====================
         # Always cleanup artifacts and temporary files, even on failure
         if inputs_dir:
-            artifact_mgr.cleanup()
+            download_mgr.cleanup()
 
         # Clean up researcher links file (used for reference validation)
         runs_base_dir = os.getenv("IVCAP_RUNS_BASE_DIR", "/tmp")

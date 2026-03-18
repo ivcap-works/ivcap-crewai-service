@@ -7,13 +7,14 @@ Converts inputs into CrewAI Knowledge Sources:
 Created: 2025-01-13
 Purpose: Enable crews to semantically search previous outputs and artifacts via knowledge_sources
 """
+from pathlib import Path
+from typing import List, Union
+import logging
 
 from crewai.knowledge.source.string_knowledge_source import StringKnowledgeSource
 from crewai.knowledge.source.pdf_knowledge_source import PDFKnowledgeSource
 from crewai.knowledge.source.text_file_knowledge_source import TextFileKnowledgeSource
-from pathlib import Path
-from typing import List, Union, Optional
-import logging
+from crewai.knowledge.source.json_knowledge_source import JSONKnowledgeSource
 
 # Use standard logging (will be configured by service.py or test harness)
 logger = logging.getLogger("app.knowledge_processor")
@@ -164,7 +165,21 @@ def create_knowledge_sources_from_artifacts(inputs_dir: str) -> List:
                 logger.info(f"✓ Text knowledge source: {text_file.name}")
             except Exception as e:
                 logger.error(f"Failed to create text knowledge source for {text_file.name}: {e}")
-    
+
+    json_files = list(inputs_path.glob("*.json"))
+    try:
+        source = JSONKnowledgeSource(
+            file_paths=json_files,
+            metadata={
+                "source_type": "previous_crew_output",
+                "filename": str(json_files),
+            }
+        )
+        sources.append(source)
+        logger.info("✓ JSON knowledge source: %s", str(json_files))
+    except Exception:
+        logger.exception("Failed to create JSON knowledge source for %s", str(json_files))
+
     logger.info(f"Created {len(sources)} artifact knowledge source(s)")
     return sources
 

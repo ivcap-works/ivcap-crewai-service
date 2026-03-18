@@ -2,10 +2,13 @@
 Download Manager for IVCAP CrewAI Service
 Downloads data from IVCAP for a list of context URNs.
 
-For each URN (an aspect URN):
-  1. Load the aspect and look for an 'artifactUrn' in its content.
-  2. If found  → download the artifact binary and save to disk (same as ArtifactManager).
-  3. If not found → save the aspect content dict as JSON to disk.
+For each URN (an aspect URN) the priority is:
+  1. If the aspect policy is 'urn:ivcap:policy:ivcap.base.service' (service output)
+     → save the aspect content dict as JSON to disk.
+  2. Else if 'artifactUrn' is present in the aspect content
+     → download the artifact binary and save to disk.
+  3. Otherwise (fallback)
+     → save the aspect content dict as JSON to disk.
 
 Saved files are placed in the same job-isolated directory structure used by ArtifactManager:
     {IVCAP_RUNS_BASE_DIR}/runs/{job_id}/inputs/
@@ -18,12 +21,17 @@ from pathlib import Path
 from typing import List, Optional
 
 from ivcap_service import getLogger, JobContext
-from ivcap_client.aspect import Aspect
+from ivcap_client.api.aspect import aspect_read
+from ivcap_client.utils import process_error
 
 
 logger = getLogger("app.download_manager")
 
 IVCAP_URL = os.environ.get("IVCAP_BASE_URL", "https://develop.ivcap.net")
+
+# Aspects with this policy are outputs from a prior IVCAP service;
+# their content is what we want rather than an artifact they may reference.
+SERVICE_OUTPUT_POLICY = "urn:ivcap:policy:ivcap.base.service"
 
 # MIME type to file extension mapping
 MIME_TO_EXT = {
@@ -72,18 +80,17 @@ class DownloadManager:
     """
     Downloads IVCAP data (artifacts or aspect content) for a specific job.
 
-    For each context URN the manager:
-      - Loads the aspect from IVCAP.
-      - Checks whether the aspect content contains an 'artifactUrn' key.
-      - If yes  → downloads the artifact binary and saves it with a proper extension.
-      - If no   → serialises the aspect content dict to JSON and saves it.
+    For each context URN the priority is:
+      1. Policy == SERVICE_OUTPUT_POLICY  → save aspect content as JSON (service output).
+      2. 'artifactUrn' found in content   → download the artifact binary.
+      3. Fallback                         → save aspect content as JSON.
 
     Directory structure (same as ArtifactManager):
         {IVCAP_RUNS_BASE_DIR}/runs/{job_id}/inputs/
 
     Usage:
         mgr = DownloadManager(job_context=jobCtxt)
-        inputs_dir = mgr.download(["urn:ivcap:aspect:..."], ivcap_client)
+        inputs_dir = mgr.download(["urn:ivcap:aspect:..."])
         # ... use files in inputs_dir ...
         mgr.cleanup()
     """
@@ -155,22 +162,33 @@ class DownloadManager:
 
     def _download_one(self, urn: str, idx: int) -> bool:
         """
-        Download one URN — artifact binary if available, aspect content otherwise.
+        Download one URN.
+
+        Priority:
+          1. Aspect policy == SERVICE_OUTPUT_POLICY → save aspect content as JSON.
+          2. content['artifactUrn'] present          → download artifact binary.
+          3. Fallback                                → save aspect content as JSON.
 
         Returns True if a file was saved successfully.
         """
         logger.info("Loading aspect: %s", urn)
-        aspect = Aspect(ivcap=self.ivcap_client, id=urn)
-        content = aspect.content  # triggers a fetch if not yet loaded
+        r = aspect_read.sync_detailed(urn, client=self.ivcap_client._client)
+        if r.status_code >= 300:
+            process_error("aspect", r)
 
-        artifact_urn = content.get("artifactUrn") if isinstance(content, dict) else None
+        aspect_rt = r.parsed
+        policy = aspect_rt.policy
+        content = aspect_rt.content.to_dict() if aspect_rt.content else {}
+        content_type = aspect_rt.content_type
 
+        if policy == SERVICE_OUTPUT_POLICY:
+            logger.info("  Service output policy detected — saving aspect content")
+            return self._save_aspect_content(urn, content, content_type, idx)
+
+        artifact_urn = content.get("content", {}).get("artifactUrn") if isinstance(content, dict) else None
         if artifact_urn:
-            logger.info(f"  Found artifactUrn: {artifact_urn} — downloading artifact")
+            logger.info("  Found artifactUrn: %s — downloading artifact", artifact_urn)
             return self._save_artifact(artifact_urn, idx)
-        else:
-            logger.info(f"  No artifactUrn in aspect content — saving content as JSON")
-            return self._save_aspect_content(urn, content, aspect.content_type, idx)
 
     def _save_artifact(self, artifact_urn: str, idx: int) -> bool:
         """Download an artifact binary and save it to disk."""
