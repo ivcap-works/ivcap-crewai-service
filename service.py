@@ -65,12 +65,12 @@ from ivcap_client.exception import ResourceNotFound
 
 from service_types import CrewA, TaskResponse, add_supported_tools
 from llm_factory import get_llm_factory
-from artifact_manager import ArtifactManager
 from ivcap_langgraph_tool import create_langgraph_tool
 
 from tools.search import WebsiteSearchToolWithLinks, SerperDevToolWithLinks
 from tools.url_metadata_extractor import URLMetadataExtractor
 from download_manager import DownloadManager
+
 # Initialize logging
 load_dotenv()
 logging_init("./logging.json")
@@ -354,12 +354,16 @@ def create_authenticated_llm(
     model_override = inputs.get("llm_model") if inputs else None
 
     llm = factory.create_llm(
-        jwt_token=jwt_token, model=model_override, temperature=0.7,
+        jwt_token=jwt_token,
+        model=model_override,
+        temperature=0.7,
     )
 
     # Create planning LLM (same model, same auth)
     planning_llm = factory.create_llm(
-        jwt_token=jwt_token, model=model_override, temperature=0.7,
+        jwt_token=jwt_token,
+        model=model_override,
+        temperature=0.7,
     )
 
     # Create embedder configuration if using litellm proxy
@@ -429,7 +433,7 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         ivcap = jobCtxt.ivcap
         if req.context_urns:
             logger.info(f"Downloading {len(req.context_urns)} artifacts...")
-            
+
             inputs_dir = download_mgr.download(req.context_urns)
 
             if inputs_dir:
@@ -604,7 +608,7 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
                         json_tool = ToolA(
                             id="urn:sd-core:crewai.builtin.JSONSearchTool",
                             name="JSONSearchTool",
-                            description="Searching within JSON file contents"
+                            description="Searching within JSON file contents",
                         )
                         agent.tools.append(json_tool)
                         logger.info("Adding Json Tool %s", agent.name)
@@ -723,7 +727,9 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         req.inputs["runs_base_dir"] = runs_base_dir
         req.inputs["additional_information"] = ""
         if req.context_urns and inputs_dir:
-            req.inputs["additional_information"] = "Read the files in the your directory to extract useful information."
+            req.inputs["additional_information"] = (
+                "Read the files in the your directory to extract useful information."
+            )
         crew_result = crew.kickoff(req.inputs)
 
         end_time = (time.process_time(), time.time())
