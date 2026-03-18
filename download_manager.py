@@ -185,7 +185,7 @@ class DownloadManager:
             logger.info("  Service output policy detected — saving aspect content")
             return self._save_aspect_content(urn, content, content_type, idx)
 
-        artifact_urn = content.get("content", {}).get("artifactUrn") if isinstance(content, dict) else None
+        artifact_urn = content.get("artifactUrn") if isinstance(content, dict) else None
         if artifact_urn:
             logger.info("  Found artifactUrn: %s — downloading artifact", artifact_urn)
             return self._save_artifact(artifact_urn, idx)

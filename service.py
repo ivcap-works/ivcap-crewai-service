@@ -131,6 +131,12 @@ class CrewRequest(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
+    additional_inputs: Optional[Union[str, list[str]]] = Field(
+        "",
+        description="[Deprecated]Previous crew outputs as markdown (string or list of strings). Use context-urns instead",
+        alias="additional-inputs",
+    )
+
 
 class CrewResponse(BaseModel):
     """Response from crew execution."""
