@@ -56,7 +56,7 @@ from crewai_tools import (
     PDFSearchTool,
     SerperDevTool,
     ScrapeWebsiteTool,
-    JSONSearchTool,
+    JSONSearchTool, WebsiteSearchTool
 )
 from ivcap_service import getLogger, Service, JobContext, get_secret
 from ivcap_ai_tool import start_tool_server, ToolOptions, ivcap_ai_tool, logging_init
@@ -160,10 +160,11 @@ class CrewResponse(BaseModel):
 add_supported_tools(
     {
         # SerperDevTool - web search (requires SERPER_API_KEY)
-        "urn:sd-core:crewai.builtin.serperDevTool": lambda _, ctxt: SerperDevToolWithLinks(
-            jwt_token=ctxt.jwt_token,
-            links_file=f"{ctxt.tmp_dir}/runs/{ctxt.job_id}/researcher_links.json",
-        ),
+        # SerperDevToolWithLinks(
+        #     jwt_token=ctxt.jwt_token,
+        #     links_file=f"{ctxt.tmp_dir}/runs/{ctxt.job_id}/researcher_links.json",
+        # ),
+        "urn:sd-core:crewai.builtin.serperDevTool": lambda _, ctxt: SerperDevTool(),
         # ScrapeWebsiteTool - scrape any website during execution
         # Can be initialized with specific URL or dynamically scrape any site
         "urn:sd-core:crewai.builtin.scrapeWebsiteTool": lambda _, ctxt: ScrapeWebsiteTool(),
@@ -180,17 +181,19 @@ add_supported_tools(
             # NO config needed - uses Crew's embedder automatically!
         ),
         # PDFSearchTool - for semantic search within PDF documents (inherits embedder from Crew)
-        "urn:sd-core:crewai.builtin.pdfSearchTool": lambda _, ctxt: PDFSearchTool(),
+        "urn:sd-core:crewai.builtin.pdfSearchTool": lambda _, ctxt: PDFSearchTool(collection_name=f"crew_{ctxt.job_id}"
+                                                                                  ),
         # FileReadTool - requires inputs_dir for base path
         "urn:sd-core:crewai.builtin.fileReadTool": lambda _, ctxt: FileReadTool(
             file_path=ctxt.inputs_dir or "."
         ),
         # WebsiteSearchTool - semantic search with vector embeddings (saves links to file)
-        "urn:sd-core:crewai.builtin.websiteSearchTool": lambda _, ctxt: WebsiteSearchToolWithLinks(
-            config=ctxt.vectordb_config,
-            links_file=f"{ctxt.tmp_dir}/runs/{ctxt.job_id}/website_links.json",
-            collection_name=f"crew_{ctxt.job_id}",
-        ),
+        # WebsiteSearchToolWithLinks(
+        #     config=ctxt.vectordb_config,
+        #     links_file=f"{ctxt.tmp_dir}/runs/{ctxt.job_id}/website_links.json",
+        #     collection_name=f"crew_{ctxt.job_id}",
+        # )
+        "urn:sd-core:crewai.builtin.websiteSearchTool": lambda _, ctxt: WebsiteSearchTool(config=ctxt.vectordb_config, collection_name=f"crew_{ctxt.job_id}"),
         # URL Metadata Extractor - fetches URL and extracts metadata using Claude
         "urn:sd-core:crewai.builtin.urlMetadataExtractor": lambda _, ctxt: URLMetadataExtractor(
             jwt_token=ctxt.jwt_token,

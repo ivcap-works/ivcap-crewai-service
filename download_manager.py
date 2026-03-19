@@ -189,6 +189,7 @@ class DownloadManager:
         if artifact_urn:
             logger.info("  Found artifactUrn: %s — downloading artifact", artifact_urn)
             return self._save_artifact(artifact_urn, idx)
+        return False
 
     def _save_artifact(self, artifact_urn: str, idx: int) -> bool:
         """Download an artifact binary and save it to disk."""
