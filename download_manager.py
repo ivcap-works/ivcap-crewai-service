@@ -213,7 +213,7 @@ class DownloadManager:
             path = self._save_aspect_content(urn, content, content_type, idx)
             return (path, "service_output") if path else None
 
-        artifact_urn = content.get("content", {}).get("artifactUrn") if isinstance(content, dict) else None
+        artifact_urn = content.get("artifactUrn") if isinstance(content, dict) else None
         if artifact_urn:
             logger.info("  Found artifactUrn: %s — downloading artifact", artifact_urn)
             path = self._save_artifact(artifact_urn, idx)
