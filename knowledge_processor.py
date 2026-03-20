@@ -134,37 +134,35 @@ def create_knowledge_sources_from_artifacts(inputs_dir: str) -> List:
     
     # Process PDF files
     pdf_files = list(inputs_path.glob("*.pdf"))
-    for pdf_file in pdf_files:
-        try:
-            source = PDFKnowledgeSource(
-                file_path=str(pdf_file),
-                metadata={
-                    "source_type": "artifact_pdf",
-                    "filename": pdf_file.name,
-                }
-            )
-            sources.append(source)
-            logger.info(f"✓ PDF knowledge source: {pdf_file.name}")
-        except Exception as e:
-            logger.error(f"Failed to create PDF knowledge source for {pdf_file.name}: {e}")
+    try:
+        source = PDFKnowledgeSource(
+            file_paths=pdf_files,
+            metadata={
+                "source_type": "artifact_pdf",
+                "filename": str(pdf_files),
+            }
+        )
+        sources.append(source)
+        logger.info("✓ PDF knowledge source: %s", str(pdf_files))
+    except Exception:
+        logger.exception("Failed to create PDF knowledge source for %s", str(pdf_files))
     
     # Process text files
     text_extensions = ["*.txt", "*.md", "*.csv"]
     for ext in text_extensions:
         text_files = list(inputs_path.glob(ext))
-        for text_file in text_files:
-            try:
-                source = TextFileKnowledgeSource(
-                    file_path=str(text_file),
-                    metadata={
-                        "source_type": "artifact_text",
-                        "filename": text_file.name,
-                    }
-                )
-                sources.append(source)
-                logger.info(f"✓ Text knowledge source: {text_file.name}")
-            except Exception as e:
-                logger.error(f"Failed to create text knowledge source for {text_file.name}: {e}")
+        try:
+            source = TextFileKnowledgeSource(
+                file_paths=text_files,
+                metadata={
+                    "source_type": "artifact_text",
+                    "filename": str(text_files),
+                }
+            )
+            sources.append(source)
+            logger.info("✓ Text knowledge source: %s", str(text_files))
+        except Exception:
+            logger.exception("Failed to create text knowledge source for %s", str(text_files))
 
     json_files = list(inputs_path.glob("*.json"))
     try:

@@ -58,6 +58,8 @@ from crewai_tools import (
     ScrapeWebsiteTool,
     JSONSearchTool, WebsiteSearchTool
 )
+from crewai.knowledge.source.json_knowledge_source import JSONKnowledgeSource
+
 from ivcap_service import getLogger, Service, JobContext, get_secret
 from ivcap_ai_tool import start_tool_server, ToolOptions, ivcap_ai_tool, logging_init
 from ivcap_client import IVCAP
@@ -69,7 +71,7 @@ from ivcap_langgraph_tool import create_langgraph_tool
 
 from tools.search import WebsiteSearchToolWithLinks, SerperDevToolWithLinks
 from tools.url_metadata_extractor import URLMetadataExtractor
-from download_manager import DownloadManager
+from download_manager import DownloadManager, DownloadResult
 
 # Initialize logging
 load_dotenv()
@@ -413,6 +415,7 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
     # Initialize managers
     download_mgr = DownloadManager(job_context=jobCtxt)
     citation_mgr = None
+    download_result: Optional[DownloadResult] = None
     inputs_dir = None
 
     try:
@@ -443,9 +446,10 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         if req.context_urns:
             logger.info(f"Downloading {len(req.context_urns)} artifacts...")
 
-            inputs_dir = download_mgr.download(req.context_urns)
+            download_result = download_mgr.download(req.context_urns)
 
-            if inputs_dir:
+            if download_result:
+                inputs_dir = download_result.inputs_dir
                 # Inject inputs directory path into crew inputs
                 if req.inputs is None:
                     req.inputs = {}
@@ -482,9 +486,9 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
             else:
                 logger.error("Artifact download failed")
                 return ResourceNotFound(
-                    f"Failed to download {req.context_urns} artifact(s). "
+                    f"Failed to download {req.context_urns} context URN(s). "
                     f"Cannot proceed as crew may depend on these files. "
-                    f"Check artifact URNs and permissions."
+                    f"Check URNs and permissions."
                 )
 
         # ==================== STEP 3: CITATIONS (optional - not implemented) ====================
@@ -499,16 +503,17 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
 
         # ==================== STEP 4.5: SMART ARTIFACT HANDLING ====================
         artifact_knowledge_sources = []
-        if req.context_urns and inputs_dir:
+        if download_result and download_result.has_artifacts:
             from service_types import ToolA
 
-            inputs_path = Path(inputs_dir)
-            pdf_files = list(inputs_path.glob("*.pdf"))
-            text_files = (
-                list(inputs_path.glob("*.txt"))
-                + list(inputs_path.glob("*.md"))
-                + list(inputs_path.glob("*.csv"))
-            )
+            pdf_files = [p for p in download_result.artifact_files if p.suffix == ".pdf"]
+            text_files = [
+                p for p in download_result.artifact_files
+                if p.suffix in (".txt", ".md", ".csv")
+            ]
+            json_files = [
+                p for p in download_result.artifact_files if p.suffix == ".json"
+            ]
 
             # Decide: tools or knowledge sources?
             use_tools = crew_wants_artifact_tools(crew_def)
@@ -613,14 +618,23 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
                             logger.info(
                                 f"  → Auto-injected DirectorySearchTool into agent '{agent.name}'"
                             )
-                    if list(inputs_path.glob("*.json")):
-                        json_tool = ToolA(
-                            id="urn:sd-core:crewai.builtin.JSONSearchTool",
-                            name="JSONSearchTool",
-                            description="Searching within JSON file contents",
+
+                    # Inject JSONSearchTool if JSON artifact files detected
+                    if json_files:
+                        has_json_search = any(
+                            t.id == "urn:sd-core:crewai.builtin.JSONSearchTool"
+                            for t in agent.tools
                         )
-                        agent.tools.append(json_tool)
-                        logger.info("Adding Json Tool %s", agent.name)
+                        if not has_json_search:
+                            json_tool = ToolA(
+                                id="urn:sd-core:crewai.builtin.JSONSearchTool",
+                                name="JSONSearchTool",
+                                description="Searching within JSON file contents",
+                            )
+                            agent.tools.append(json_tool)
+                            logger.info(
+                                f"  → Auto-injected JSONSearchTool into agent '{agent.name}'"
+                            )
 
             else:
                 logger.info(
@@ -731,14 +745,25 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         # Create outputs directory
         outputs_dir = Path(f"{runs_base_dir}/runs/{jobCtxt.job_id}/outputs")
         outputs_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"Created outputs directory: {outputs_dir}")
+        logger.info("Created outputs directory: %s", outputs_dir)
         req.inputs["job_id"] = jobCtxt.job_id
         req.inputs["runs_base_dir"] = runs_base_dir
-        req.inputs["additional_information"] = ""
-        if req.context_urns and inputs_dir:
-            req.inputs["additional_information"] = (
-                "Read the files in the your directory to extract useful information."
-            )
+        additional_information = ""
+        if download_result and download_result.has_service_outputs:
+            try:
+                ks = JSONKnowledgeSource(
+                    file_paths=download_result.service_output_files
+                )
+                additional_information += "\n\n".join(ks.content.values())
+                logger.info(
+                    f"✓ Loaded {len(download_result.service_output_files)} service output(s) as additional_information"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to load service outputs via JSONKnowledgeSource: {e}")
+        if download_result and download_result.has_artifacts:
+            additional_information += "Read the files in your directory to extract useful information."
+        req.inputs["additional_information"] = additional_information
+        logger.info("Starting crew with inputs %s", req.inputs)
         crew_result = crew.kickoff(req.inputs)
 
         end_time = (time.process_time(), time.time())
@@ -814,6 +839,7 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         if inputs_dir:
             download_mgr.cleanup()
 
+        crew.reset_memories('all')
         # Clean up researcher links file (used for reference validation)
         runs_base_dir = os.getenv("IVCAP_RUNS_BASE_DIR", "/tmp")
         job_dir = Path(f"{runs_base_dir}/runs/{jobCtxt.job_id}/")

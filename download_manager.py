@@ -17,8 +17,9 @@ Saved files are placed in the same job-isolated directory structure used by Arti
 import json
 import os
 import shutil
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from ivcap_service import getLogger, JobContext
 from ivcap_client.api.aspect import aspect_read
@@ -26,6 +27,23 @@ from ivcap_client.utils import process_error
 
 
 logger = getLogger("app.download_manager")
+
+
+@dataclass
+class DownloadResult:
+    """Result of a download operation, separating service outputs from document artifacts."""
+
+    inputs_dir: str
+    service_output_files: List[Path] = field(default_factory=list)
+    artifact_files: List[Path] = field(default_factory=list)
+
+    @property
+    def has_service_outputs(self) -> bool:
+        return bool(self.service_output_files)
+
+    @property
+    def has_artifacts(self) -> bool:
+        return bool(self.artifact_files)
 
 IVCAP_URL = os.environ.get("IVCAP_BASE_URL", "https://develop.ivcap.net")
 
@@ -106,16 +124,15 @@ class DownloadManager:
     # Public API
     # ------------------------------------------------------------------
 
-    def download(self, context_urns: List[str]) -> Optional[str]:
+    def download(self, context_urns: List[str]) -> Optional[DownloadResult]:
         """
         Download data for each context URN into the job inputs directory.
 
         Args:
             context_urns: List of IVCAP aspect URNs.
-            ivcap_client: IVCAP client from JobContext.ivcap.
 
         Returns:
-            Path to inputs directory as string, or None if nothing was saved.
+            DownloadResult with categorised file paths, or None if nothing was saved.
         """
         if not context_urns:
             logger.info("No context URNs to download")
@@ -124,22 +141,31 @@ class DownloadManager:
         self.inputs_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"Created inputs directory: {self.inputs_dir}")
 
-        downloaded_count = 0
+        result = DownloadResult(inputs_dir=str(self.inputs_dir))
         for idx, urn in enumerate(context_urns):
             try:
-                saved = self._download_one(urn, idx)
-                if saved:
-                    downloaded_count += 1
+                outcome = self._download_one(urn, idx)
+                if outcome:
+                    path, download_type = outcome
+                    if download_type == "service_output":
+                        result.service_output_files.append(path)
+                    else:
+                        result.artifact_files.append(path)
             except Exception as e:
                 logger.warning(f"Failed to download {urn}: {e}")
 
-        if downloaded_count == 0:
+        total = len(result.service_output_files) + len(result.artifact_files)
+        if total == 0:
             logger.error("No URNs successfully downloaded")
             self.cleanup()
             return None
 
-        logger.info(f"Downloaded {downloaded_count}/{len(context_urns)} URNs")
-        return str(self.inputs_dir)
+        logger.info(
+            f"Downloaded {total}/{len(context_urns)} URNs "
+            f"({len(result.service_output_files)} service outputs, "
+            f"{len(result.artifact_files)} artifacts)"
+        )
+        return result
 
     def cleanup(self):
         """Remove all downloaded files for this job."""
@@ -160,7 +186,7 @@ class DownloadManager:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _download_one(self, urn: str, idx: int) -> bool:
+    def _download_one(self, urn: str, idx: int) -> Optional[Tuple[Path, str]]:
         """
         Download one URN.
 
@@ -169,7 +195,8 @@ class DownloadManager:
           2. content['artifactUrn'] present          → download artifact binary.
           3. Fallback                                → save aspect content as JSON.
 
-        Returns True if a file was saved successfully.
+        Returns (saved_path, download_type) where download_type is "service_output"
+        or "artifact", or None if nothing was saved.
         """
         logger.info("Loading aspect: %s", urn)
         r = aspect_read.sync_detailed(urn, client=self.ivcap_client._client)
@@ -183,16 +210,19 @@ class DownloadManager:
 
         if policy == SERVICE_OUTPUT_POLICY:
             logger.info("  Service output policy detected — saving aspect content")
-            return self._save_aspect_content(urn, content, content_type, idx)
+            path = self._save_aspect_content(urn, content, content_type, idx)
+            return (path, "service_output") if path else None
 
-        artifact_urn = content.get("artifactUrn") if isinstance(content, dict) else None
+        artifact_urn = content.get("content", {}).get("artifactUrn") if isinstance(content, dict) else None
         if artifact_urn:
             logger.info("  Found artifactUrn: %s — downloading artifact", artifact_urn)
-            return self._save_artifact(artifact_urn, idx)
-        return False
+            path = self._save_artifact(artifact_urn, idx)
+            return (path, "artifact") if path else None
 
-    def _save_artifact(self, artifact_urn: str, idx: int) -> bool:
-        """Download an artifact binary and save it to disk."""
+        return None
+
+    def _save_artifact(self, artifact_urn: str, idx: int) -> Optional[Path]:
+        """Download an artifact binary and save it to disk. Returns the saved path."""
         artifact = self.ivcap_client.get_artifact(artifact_urn)
 
         mime_type = artifact.mime_type
@@ -204,7 +234,7 @@ class DownloadManager:
             f.write(file_obj.read())
 
         logger.info(f"  Saved artifact → {file_path} ({mime_type or 'unknown type'})")
-        return True
+        return file_path
 
     def _save_aspect_content(
         self,
@@ -212,8 +242,8 @@ class DownloadManager:
         content: dict,
         content_type: Optional[str],
         idx: int,
-    ) -> bool:
-        """Serialise aspect content dict to a local file."""
+    ) -> Optional[Path]:
+        """Serialise aspect content dict to a local file. Returns the saved path."""
         # Derive a base name from the last segment of the URN
         base_name = urn.rsplit(":", 1)[-1] if urn else f"aspect_{idx}"
         if not base_name:
@@ -231,7 +261,7 @@ class DownloadManager:
             json.dump(content, f, indent=2, default=str)
 
         logger.info(f"  Saved aspect content → {file_path}")
-        return True
+        return file_path
 
     def _filename_for_artifact(
         self,
