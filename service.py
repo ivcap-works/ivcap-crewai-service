@@ -839,7 +839,7 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         if inputs_dir:
             download_mgr.cleanup()
 
-        crew.reset_memories('all')
+        # crew.reset_memories('all')
         # Clean up researcher links file (used for reference validation)
         runs_base_dir = os.getenv("IVCAP_RUNS_BASE_DIR", "/tmp")
         job_dir = Path(f"{runs_base_dir}/runs/{jobCtxt.job_id}/")
