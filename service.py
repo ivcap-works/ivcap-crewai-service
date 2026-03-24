@@ -183,7 +183,7 @@ add_supported_tools(
             # NO config needed - uses Crew's embedder automatically!
         ),
         # PDFSearchTool - for semantic search within PDF documents (inherits embedder from Crew)
-        "urn:sd-core:crewai.builtin.pdfSearchTool": lambda _, ctxt: PDFSearchTool(collection_name=f"crew_{ctxt.job_id}"
+        "urn:sd-core:crewai.builtin.pdfSearchTool": lambda _, ctxt: PDFSearchTool(config=ctxt.vectordb_config, collection_name=f"crew_{ctxt.job_id}"
                                                                                   ),
         # FileReadTool - requires inputs_dir for base path
         "urn:sd-core:crewai.builtin.fileReadTool": lambda _, ctxt: FileReadTool(
@@ -839,7 +839,8 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         if inputs_dir:
             download_mgr.cleanup()
 
-        # crew.reset_memories('all')
+        if crew:
+            crew.reset_memories('knowledge')
         # Clean up researcher links file (used for reference validation)
         runs_base_dir = os.getenv("IVCAP_RUNS_BASE_DIR", "/tmp")
         job_dir = Path(f"{runs_base_dir}/runs/{jobCtxt.job_id}/")
