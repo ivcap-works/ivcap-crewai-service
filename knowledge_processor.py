@@ -7,13 +7,14 @@ Converts inputs into CrewAI Knowledge Sources:
 Created: 2025-01-13
 Purpose: Enable crews to semantically search previous outputs and artifacts via knowledge_sources
 """
+from pathlib import Path
+from typing import List, Union
+import logging
 
 from crewai.knowledge.source.string_knowledge_source import StringKnowledgeSource
 from crewai.knowledge.source.pdf_knowledge_source import PDFKnowledgeSource
 from crewai.knowledge.source.text_file_knowledge_source import TextFileKnowledgeSource
-from pathlib import Path
-from typing import List, Union, Optional
-import logging
+from crewai.knowledge.source.json_knowledge_source import JSONKnowledgeSource
 
 # Use standard logging (will be configured by service.py or test harness)
 logger = logging.getLogger("app.knowledge_processor")
@@ -133,38 +134,53 @@ def create_knowledge_sources_from_artifacts(inputs_dir: str) -> List:
     
     # Process PDF files
     pdf_files = list(inputs_path.glob("*.pdf"))
-    for pdf_file in pdf_files:
+    if pdf_files:
         try:
             source = PDFKnowledgeSource(
-                file_path=str(pdf_file),
+                file_paths=pdf_files,
                 metadata={
                     "source_type": "artifact_pdf",
-                    "filename": pdf_file.name,
+                    "filename": str(pdf_files),
                 }
             )
             sources.append(source)
-            logger.info(f"✓ PDF knowledge source: {pdf_file.name}")
-        except Exception as e:
-            logger.error(f"Failed to create PDF knowledge source for {pdf_file.name}: {e}")
-    
+            logger.info("✓ PDF knowledge source: %s", str(pdf_files))
+        except Exception:
+            logger.exception("Failed to create PDF knowledge source for %s", str(pdf_files))
+        
     # Process text files
     text_extensions = ["*.txt", "*.md", "*.csv"]
     for ext in text_extensions:
         text_files = list(inputs_path.glob(ext))
-        for text_file in text_files:
+        if text_files:
             try:
                 source = TextFileKnowledgeSource(
-                    file_path=str(text_file),
+                    file_paths=text_files,
                     metadata={
                         "source_type": "artifact_text",
-                        "filename": text_file.name,
+                        "filename": str(text_files),
                     }
                 )
                 sources.append(source)
-                logger.info(f"✓ Text knowledge source: {text_file.name}")
-            except Exception as e:
-                logger.error(f"Failed to create text knowledge source for {text_file.name}: {e}")
-    
+                logger.info("✓ Text knowledge source: %s", str(text_files))
+            except Exception:
+                logger.exception("Failed to create text knowledge source for %s", str(text_files))
+
+    json_files = list(inputs_path.glob("*.json"))
+    if json_files:
+        try:
+            source = JSONKnowledgeSource(
+                file_paths=json_files,
+                metadata={
+                    "source_type": "previous_crew_output",
+                    "filename": str(json_files),
+                }
+            )
+            sources.append(source)
+            logger.info("✓ JSON knowledge source: %s", str(json_files))
+        except Exception:
+            logger.exception("Failed to create JSON knowledge source for %s", str(json_files))
+
     logger.info(f"Created {len(sources)} artifact knowledge source(s)")
     return sources
 

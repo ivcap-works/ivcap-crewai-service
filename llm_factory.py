@@ -11,6 +11,7 @@ Changes:
 import os
 from typing import Optional
 from crewai import LLM
+from crewai.rag.embeddings.providers.openai import OpenAIProviderSpec
 from ivcap_service import getLogger
 
 logger = getLogger("app.llm_factory")
@@ -190,12 +191,12 @@ class LLMFactory:
             logger.warning("No litellm proxy URL configured, cannot create embedder")
             return None
         
-        embedding_model = "text-embedding-3-small"
+        embedding_model = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
         
-        embedder_config = {
+        embedder_config : OpenAIProviderSpec = {
             "provider": "openai",
             "config": {
-                "model": embedding_model,
+                "model_name": embedding_model,
                 "api_key": jwt_token,
                 "api_base": self.litellm_proxy_url,
                 "default_headers": {
