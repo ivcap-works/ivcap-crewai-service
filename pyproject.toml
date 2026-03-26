@@ -16,7 +16,7 @@ dependencies = [
     "pyjwt (>=2.10.0,<3.0.0)",
     "chromadb (>=0.4.0)",
     "qdrant-client (>=1.14.3)",
-    "litellm (>=1.0.0,<2.0.0)",
+    "litellm (>=1.0.0,<1.82.6)",
     "ivcap-client (==0.44.4)",
     "ivcap-service (==0.6.16)",
     "python-dotenv>=1.2.1",
