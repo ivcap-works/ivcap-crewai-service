@@ -67,6 +67,7 @@ class Context():
     jwt_token: Optional[str] = None
     llm_factory: Optional[Any] = None
     citation_manager: Optional[Any] = None
+    embedder: Optional[dict] = None
 
     def __post_init__(self):
         """Set tmp_dir from environment variable if not provided"""
@@ -347,6 +348,7 @@ class CrewA(BaseModel):
             inputs_dir=inputs_dir,
             jwt_token=jwt_token,
             llm_factory=get_llm_factory() if jwt_token else None,
+            embedder=embedder,
             citation_manager=None  # Not implemented in this version
         )
         
