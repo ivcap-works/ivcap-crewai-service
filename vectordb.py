@@ -13,6 +13,7 @@ from chromadb.config import Settings
 from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
 
 BASE_DIR = os.getenv("IVCAP_RUNS_BASE_DIR", "/tmp")
+os.environ["CHROMA_OPENAI_API_KEY"] = os.environ.get("OPENAI_API_KEY", "NA")
 def create_vectordb_config(job_id: str, jwt_token) -> dict:
     """
     Create vectordb configuration for CrewAI tools.
