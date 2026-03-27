@@ -69,7 +69,7 @@ from service_types import CrewA, TaskResponse, add_supported_tools
 from llm_factory import get_llm_factory
 from ivcap_langgraph_tool import create_langgraph_tool
 
-from tools.search import WebsiteSearchToolWithLinks, SerperDevToolWithLinks
+from tools.search import WebsiteSearchToolWithLinks, SerperDevToolWithLinks, WebsiteSearchToolWithJobFolder, SerperDevToolWithJobFolder
 from tools.url_metadata_extractor import URLMetadataExtractor
 from download_manager import DownloadManager, DownloadResult
 
@@ -166,7 +166,7 @@ add_supported_tools(
         #     jwt_token=ctxt.jwt_token,
         #     links_file=f"{ctxt.tmp_dir}/runs/{ctxt.job_id}/researcher_links.json",
         # ),
-        "urn:sd-core:crewai.builtin.serperDevTool": lambda _, ctxt: SerperDevTool(),
+        "urn:sd-core:crewai.builtin.serperDevTool": lambda _, ctxt: SerperDevToolWithJobFolder(job_folder=f"{ctxt.tmp_dir}/runs/{ctxt.job_id}"),
         # ScrapeWebsiteTool - scrape any website during execution
         # Can be initialized with specific URL or dynamically scrape any site
         "urn:sd-core:crewai.builtin.scrapeWebsiteTool": lambda _, ctxt: ScrapeWebsiteTool(),
@@ -183,7 +183,7 @@ add_supported_tools(
             # NO config needed - uses Crew's embedder automatically!
         ),
         # PDFSearchTool - for semantic search within PDF documents (inherits embedder from Crew)
-        "urn:sd-core:crewai.builtin.pdfSearchTool": lambda _, ctxt: PDFSearchTool(config=ctxt.vectordb_config, collection_name=f"crew_{ctxt.job_id}"
+        "urn:sd-core:crewai.builtin.pdfSearchTool": lambda _, ctxt: PDFSearchTool(config={"embedding_model": ctxt.embedder, "vectordb": ctxt.vectordb_config.get("vectordb")}, collection_name=f"crew_{ctxt.job_id}"
                                                                                   ),
         # FileReadTool - requires inputs_dir for base path
         "urn:sd-core:crewai.builtin.fileReadTool": lambda _, ctxt: FileReadTool(
@@ -195,7 +195,7 @@ add_supported_tools(
         #     links_file=f"{ctxt.tmp_dir}/runs/{ctxt.job_id}/website_links.json",
         #     collection_name=f"crew_{ctxt.job_id}",
         # )
-        "urn:sd-core:crewai.builtin.websiteSearchTool": lambda _, ctxt: WebsiteSearchTool(config=ctxt.vectordb_config, collection_name=f"crew_{ctxt.job_id}"),
+        "urn:sd-core:crewai.builtin.websiteSearchTool": lambda _, ctxt: WebsiteSearchToolWithJobFolder(config={"embedding_model": ctxt.embedder, "vectordb": ctxt.vectordb_config.get("vectordb")}, collection_name=f"crew_{ctxt.job_id}", job_folder=f"{ctxt.tmp_dir}/runs/{ctxt.job_id}", jwt_token=ctxt.jwt_token),
         # URL Metadata Extractor - fetches URL and extracts metadata using Claude
         "urn:sd-core:crewai.builtin.urlMetadataExtractor": lambda _, ctxt: URLMetadataExtractor(
             jwt_token=ctxt.jwt_token,
@@ -417,7 +417,7 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
     citation_mgr = None
     download_result: Optional[DownloadResult] = None
     inputs_dir = None
-
+    crew = None
     try:
         # ==================== STEP 1: AUTHENTICATION ====================
         jwt_token = get_auth_token(jobCtxt)

@@ -30,11 +30,8 @@ from crewai import Agent, Task, Crew, Process, LLM
 from crewai.tasks import TaskOutput
 from crewai.tools.base_tool import BaseTool
 
-from dotenv import load_dotenv
-#from crewai_tools import SerperDevTool, DirectoryReadTool, FileReadTool, WebsiteSearchTool
-from crewai_tools import WebsiteSearchTool
-from crewai.types.usage_metrics import UsageMetrics
-#from langchain_core.agents import AgentAction, AgentFinish
+from task import create_validate_urls_task
+from ivcap_service import getLogger as _getLogger
 from ivcap_client import IVCAP
 from ivcap_tool import ivcap_tool_test
 from vectordb import create_vectordb_config
@@ -42,6 +39,7 @@ from vectordb import create_vectordb_config
 from events import EventListener
 EventListener()
 
+_logger = _getLogger(__name__)
 IVCAP_BASE_URL = os.environ.get("IVCAP_BASE_URL", "http://ivcap.local")
 
 @dataclass
@@ -67,6 +65,7 @@ class Context():
     jwt_token: Optional[str] = None
     llm_factory: Optional[Any] = None
     citation_manager: Optional[Any] = None
+    embedder: Optional[dict] = None
 
     def __post_init__(self):
         """Set tmp_dir from environment variable if not provided"""
@@ -231,6 +230,7 @@ class TaskA(BaseModel):
     tools: List[ToolA] = Field([])
     async_execution: Optional[bool] = Field(False)
     context: Optional[List[str]] = Field([])  # String names, not Task objects!
+    markdown: Optional[bool] = Field(default=False, description="Whether the agent should return the final answer formatted in Markdown")
 
     def as_crew_task(self, agents: Dict[str, Agent], ctxt: Context, **kwargs) -> Task:
         """
@@ -326,12 +326,12 @@ class CrewA(BaseModel):
     ) -> Crew:
         """
         Build Crew using CrewBuilder for proper task context resolution.
-        
+
         This is the entry point from service.py. It:
         1. Creates Context with all runtime info
         2. Delegates to CrewBuilder for proper task chaining
         3. Returns fully configured Crew
-        
+
         Updated: Uses CrewBuilder for two-pass task context resolution
         Updated: Added embedder parameter for JWT-authenticated embeddings
         Updated: Added knowledge_sources parameter for previous crew outputs
@@ -339,7 +339,7 @@ class CrewA(BaseModel):
         # Import here to avoid circular dependency
         from llm_factory import get_llm_factory
         from crew_builder import CrewBuilder
-        
+
         # Build context
         ctxt = Context(
             vectordb_config=create_vectordb_config(job_id, jwt_token),
@@ -347,9 +347,10 @@ class CrewA(BaseModel):
             inputs_dir=inputs_dir,
             jwt_token=jwt_token,
             llm_factory=get_llm_factory() if jwt_token else None,
+            embedder=embedder,
             citation_manager=None  # Not implemented in this version
         )
-        
+
         # Use CrewBuilder for proper task context resolution
         builder = CrewBuilder(ctxt)
         crew = builder.build_crew(
@@ -361,7 +362,62 @@ class CrewA(BaseModel):
             knowledge_sources=knowledge_sources,
             **kwargs
         )
-        
+
+        if self.allow_urn_validations:
+            crew = self._inject_validate_urls_task(crew, ctxt)
+
+        return crew
+
+    @property
+    def allow_urn_validations(self):
+        return self.name and self.name in ["Deep Research"]
+    
+    def _inject_validate_urls_task(self, crew: Crew, ctxt: Context) -> Crew:
+        """
+        Inject a URL validation task into a deepresearch crew.
+
+        The task is inserted immediately after the researcher task and its
+        output is added as context to both the analyst and writer tasks.
+        """
+        task_map = {t.name: t for t in crew.tasks}
+        researcher_task = task_map.get("Comprehensive Research")
+        analyst_task = task_map.get("Research Analysis")
+        writer_task = task_map.get("Final Report")
+
+        if not all([researcher_task, analyst_task, writer_task]):
+            _logger.warning(
+                "deepresearch URL validation injection skipped: expected tasks not found "
+                "(got: %s)", list(task_map.keys())
+            )
+            return crew
+
+        job_folder = os.path.join(ctxt.tmp_dir, "runs", ctxt.job_id)
+        validate_task = create_validate_urls_task(
+            agent=analyst_task.agent,
+            jwt_token=ctxt.jwt_token,
+            job_folder=job_folder,
+            output_file=os.path.join(job_folder, "validated_references.md"),
+        )
+
+        # Insert immediately after the researcher task
+        researcher_idx = crew.tasks.index(researcher_task)
+        crew.tasks.insert(researcher_idx + 1, validate_task)
+
+        # Propagate validate_task output as context to analyst and writer
+        analyst_task.context = (analyst_task.context or []) + [validate_task]
+        writer_task.context = (writer_task.context or []) + [validate_task]
+
+        # Instruct both agents to incorporate the validated references
+        validation_instruction = (
+            "\n\nA URL validation report has been produced by a prior task. "
+            "You MUST incorporate its findings: use only the validated references "
+            "listed in that report, discard any URLs that did not pass validation, "
+            "and ensure every claim is supported by a validated source."
+        )
+        analyst_task.description += validation_instruction
+        writer_task.description += validation_instruction
+
+        _logger.info("Injected validate_urls task into deepresearch crew after researcher")
         return crew
 
 class TaskResponse(BaseModel):

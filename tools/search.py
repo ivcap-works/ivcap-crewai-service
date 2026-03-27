@@ -1,16 +1,22 @@
 """Custom search tools"""
 
+import datetime
 import json
 import os
-from typing import Optional, Set, Dict
+from typing import Optional, Set, Dict, Any
 from pydantic import Field
 
+import anthropic
+from crewai import LLM
 from crewai_tools import WebsiteSearchTool, SerperDevTool
 
 from ivcap_service import getLogger
 from tools.url_metadata_extractor import URLMetadataFetcher
 
 logger = getLogger(__name__)
+
+SERPER_RESULTS_FILE_PREFIX = "serper"
+WEBSITE_SEARCH_FILE_PREFIX = "website_search"
 
 
 class WebsiteSearchToolWithLinks(WebsiteSearchTool):
@@ -287,3 +293,130 @@ class SerperDevToolWithLinks(SerperDevTool):
         except Exception as e:
             # Log error but don't fail the search
             logger.exception("Failed to save links to %s: %s", self.links_file, e)
+
+
+class SerperDevToolWithJobFolder(SerperDevTool):
+    """
+    Serper search tool that saves raw search results to the job folder.
+
+    Overrides the save behaviour of SerperDevTool so that results are written
+    to a timestamped JSON file inside job_folder using SERPER_RESULTS_FILE_PREFIX
+    as the filename prefix (e.g. serper_2026-03-25_12-00-00.json).
+    The prefix matches possible_url_file_prefixes in url_metadata_extractor.py,
+    allowing URLMetadataExtractor to discover these files via glob.
+    """
+
+    job_folder: str = Field(description="Folder where search result files will be saved")
+    save_file: bool = Field(default=True, description="Whether to save results to job_folder")
+
+    def _save_results_to_file(self, content: str) -> None:
+        """Save search results to a timestamped file inside job_folder."""
+        filename = f"{SERPER_RESULTS_FILE_PREFIX}_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json"
+        file_path = os.path.join(self.job_folder, filename)
+        os.makedirs(self.job_folder, exist_ok=True)
+        try:
+            with open(file_path, "w") as f:
+                f.write(content)
+            logger.info("Serper results saved to %s", file_path)
+        except IOError:
+            logger.exception("Failed to save Serper results to %s", file_path)
+            raise
+
+    def _run(self, **kwargs: Any) -> Any:
+        save_file = kwargs.pop("save_file", self.save_file)
+        result = super()._run(**kwargs, save_file=False)
+        if result and save_file:
+            source = {
+                "source_links": result.get("organic")
+            }
+            self._save_results_to_file(json.dumps(source, indent=2))
+        return result
+
+
+class WebsiteSearchToolWithJobFolder(WebsiteSearchTool):
+    """
+    Website search tool that saves searched website links to the job folder.
+
+    Overrides the _run method of WebsiteSearchTool to write a JSON file
+    containing the searched website URL to job_folder after each search.
+    The WEBSITE_SEARCH_FILE_PREFIX filename prefix matches possible_url_file_prefixes
+    in url_metadata_extractor.py, allowing URLMetadataExtractor to discover these
+    files via glob.
+    """
+
+    job_folder: str = Field(description="Folder where website link files will be saved")
+    save_file: bool = Field(default=True, description="Whether to save the website link to job_folder")
+    jwt_token: str = Field(description="JWT token")
+
+    def _save_results_to_file(self, website: str, search_query: str) -> None:
+        """Save the searched website link to a timestamped JSON file inside job_folder."""
+        filename = f"{WEBSITE_SEARCH_FILE_PREFIX}_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json"
+        file_path = os.path.join(self.job_folder, filename)
+        os.makedirs(self.job_folder, exist_ok=True)
+        try:
+            with open(file_path, "w") as f:
+                json.dump({"source_links": [{"url": website, "title": search_query}]}, f, indent=2)
+            logger.info("Website search link saved to %s", file_path)
+        except IOError:
+            logger.exception("Failed to save website search link to %s", file_path)
+            raise
+
+    def is_relevant(self, query: str, response: str) -> bool:
+        """Check if the search response is relevant to the query using an LLM.
+
+        Args:
+            query: The original search query.
+            response: The response returned by super()._run().
+
+        Returns:
+            True if the response is relevant to the query, False otherwise.
+        """
+
+        prompt = (
+            f"You are a relevance checker. Given a search query and a search response, "
+            f"determine whether the response is relevant to the query.\n\n"
+            f"Query: {query}\n\n"
+            f"Response: {response}\n\n"
+            f"Reply with exactly one word: 'yes' if the response is relevant, 'no' if it is not."
+        )
+        llm_config = {
+                "model": os.getenv("LITELLM_DEFAULT_MODEL"),
+                "base_url": os.getenv("LITELLM_PROXY"),
+                "api_key": self.jwt_token,  # JWT as API key (LiteLLM convention)
+                "default_headers": {
+                    "Authorization": f"Bearer {self.jwt_token}"  # Standard OAuth2
+                }
+            }
+        llm = LLM(**llm_config)
+        try:
+            answer = llm.call([{"role": "user", "content": prompt}])
+        except Exception:
+            logger.exception("Error when executing is_relevant")
+            return False
+        # logger.info("Query %s, response %s", query, response)
+        return answer.strip().lower().startswith("yes")
+
+    def _run(  # type: ignore[override]
+        self,
+        search_query: str,
+        website: str | None = None,
+        similarity_threshold: float | None = None,
+        limit: int | None = None,
+    ) -> str:
+        result = None
+        try:
+            result = super()._run(
+                search_query=search_query,
+                website=website,
+                similarity_threshold=similarity_threshold,
+                limit=limit,
+            )
+        except Exception:
+            logger.exception("Error when invoking website search")
+            raise
+
+        # is_irrelevant = "No relevant content found" in result
+        is_relevant = self.is_relevant(search_query, result)
+        if self.save_file and website and is_relevant:
+            self._save_results_to_file(website, search_query)
+        return result

@@ -3,6 +3,7 @@ URL Metadata Extractor Tool
 Uses Claude's web_fetch tool to fetch URLs and extract metadata.
 """
 
+import glob
 import json
 import os
 from urllib.parse import urlparse
@@ -25,9 +26,6 @@ GEMINI_MODEL = os.getenv("LITELLM_GEMINI_MODEL", "gemini-2.5-pro")
 class URLMetadataInput(BaseModel):
     """Input schema for URL metadata extraction"""
 
-    file_path: str = Field(
-        description="Path to a JSON file containing a list of objects, each with a 'url' field and optionally a 'title' field"
-    )
     research_topic: str = Field(description="The user's research topic.")
 
 
@@ -295,11 +293,12 @@ class URLMetadataFetcher(BaseModel):
             return URLInfo()
 
 
+possible_url_file_prefixes = ["serper", "website_search"] 
 class URLMetadataExtractor(BaseTool):
     """
-    Fetches a URL using Claude's web_fetch tool and extracts metadata.
+    Fetches a URL using web_fetch tool and extracts metadata.
 
-    This tool uses Claude (via Anthropic API) with web_fetch capability to:
+    This tool uses web_fetch capability to:
     1. Fetch the webpage content from the internet
     2. Parse and extract title, authors, and organization
     3. Return structured metadata in a consistent format
@@ -309,9 +308,10 @@ class URLMetadataExtractor(BaseTool):
 
     name: str = "URL Metadata Extractor"
     description: str = (
-        "Fetches a URL using Claude's web capabilities and extracts metadata including "
-        "title, authors, and organization. Returns formatted metadata: "
-        "Title, Authors, Organization, URL. Use this to validate reference information."
+        "Reads all URL list files from the job folder (files whose names start with "
+        f"{possible_url_file_prefixes}) and validates each URL using web capabilities, "
+        "extracting metadata including title, authors, and organization. "
+        "Use this to validate reference information."
     )
     args_schema: Type[BaseModel] = URLMetadataInput
 
@@ -336,40 +336,49 @@ class URLMetadataExtractor(BaseTool):
         description="The folder where all documents for the job are kept"
     )
 
-    def _run(self, file_path: str, research_topic: str) -> str:
+    def _run(self, research_topic: str) -> str:
         """
-        Fetch URL and extract metadata using Gemini with web_fetch tool.
+        Fetch URLs and extract metadata using Gemini with web_fetch tool.
+
+        Discovers all JSON files in job_folder whose names start with any prefix
+        in possible_url_file_prefixes, combines their source_links, and validates them.
 
         Args:
-            file_path: Path to a JSON file containing 'url' and optionally 'title'
             research_topic: The user's research topic
 
         Returns:
-            Formatted string with extracted metadata
+            Dict of validated URL metadata
         """
-        file_path = f"{self.job_folder}/{file_path}"
-        logger.info("Reading file %s", file_path)
-        if not os.path.exists(file_path):
-            logger.info("%s file not found")
-            return []
-        try:
-            with open(file_path, "r") as f:
-                file_data = json.load(f)
-        except Exception:
-            logger.exception("Error reading %s", file_path)
-            return []
-        if "source_links" not in file_data:
-            logger.exception("Links not found %s", file_data)
-            return []
+        patterns = [
+            os.path.join(self.job_folder, f"{prefix}*.json")
+            for prefix in possible_url_file_prefixes
+        ]
+        matched_files = []
+        for pattern in patterns:
+            matched_files.extend(glob.glob(pattern))
 
-        url_list = file_data.get("source_links", [])
+        logger.info("Found %d files matching URL prefixes: %s", len(matched_files), matched_files)
+
+        url_list = []
+        for file_path in matched_files:
+            try:
+                with open(file_path, "r") as f:
+                    file_data = json.load(f)
+            except Exception:
+                logger.exception("Error reading %s", file_path)
+                continue
+            if "source_links" not in file_data:
+                logger.warning("No 'source_links' key in %s, skipping", file_path)
+                continue
+            url_list.extend(file_data.get("source_links", []))
+
         if not url_list:
-            return f"Error: Expected a list of URL objects in {file_path}"
+            return f"Error: No URL objects found in job_folder matching prefixes {possible_url_file_prefixes}"
 
         to_be_validated = [
-            item for item in url_list if item.get("url") not in self.metadata_cache
+            item for item in url_list if item.get("url", item.get("link")) not in self.metadata_cache
         ]
-        new_metadata = self.fetcher.validate_urls(to_be_validated, research_topic)
+        new_metadata = self.fetcher.validate_urls(to_be_validated, self.jwt_token, research_topic)
         self.metadata_cache.update(new_metadata)
         self._save_metadata()
         return self.metadata_cache
