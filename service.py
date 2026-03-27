@@ -183,7 +183,7 @@ add_supported_tools(
             # NO config needed - uses Crew's embedder automatically!
         ),
         # PDFSearchTool - for semantic search within PDF documents (inherits embedder from Crew)
-        "urn:sd-core:crewai.builtin.pdfSearchTool": lambda _, ctxt: PDFSearchTool(config=ctxt.vectordb_config, collection_name=f"crew_{ctxt.job_id}"
+        "urn:sd-core:crewai.builtin.pdfSearchTool": lambda _, ctxt: PDFSearchTool(config={"embedding_model": ctxt.embedder, "vectordb": ctxt.vectordb_config.get("vectordb")}, collection_name=f"crew_{ctxt.job_id}"
                                                                                   ),
         # FileReadTool - requires inputs_dir for base path
         "urn:sd-core:crewai.builtin.fileReadTool": lambda _, ctxt: FileReadTool(
@@ -195,7 +195,7 @@ add_supported_tools(
         #     links_file=f"{ctxt.tmp_dir}/runs/{ctxt.job_id}/website_links.json",
         #     collection_name=f"crew_{ctxt.job_id}",
         # )
-        "urn:sd-core:crewai.builtin.websiteSearchTool": lambda _, ctxt: WebsiteSearchTool(config=ctxt.vectordb_config, collection_name=f"crew_{ctxt.job_id}"),
+        "urn:sd-core:crewai.builtin.websiteSearchTool": lambda _, ctxt: WebsiteSearchTool(config={"embedding_model": ctxt.embedder, "vectordb": ctxt.vectordb_config.get("vectordb")}, collection_name=f"crew_{ctxt.job_id}"),
         # URL Metadata Extractor - fetches URL and extracts metadata using Claude
         "urn:sd-core:crewai.builtin.urlMetadataExtractor": lambda _, ctxt: URLMetadataExtractor(
             jwt_token=ctxt.jwt_token,
@@ -417,7 +417,7 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
     citation_mgr = None
     download_result: Optional[DownloadResult] = None
     inputs_dir = None
-
+    crew = None
     try:
         # ==================== STEP 1: AUTHENTICATION ====================
         jwt_token = get_auth_token(jobCtxt)
