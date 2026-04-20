@@ -367,14 +367,14 @@ def create_authenticated_llm(
     llm = factory.create_llm(
         jwt_token=jwt_token,
         model=model_override,
-        temperature=0.7,
+        # temperature=0.7,
     )
 
     # Create planning LLM (same model, same auth)
     planning_llm = factory.create_llm(
         jwt_token=jwt_token,
         model=model_override,
-        temperature=0.7,
+        # temperature=0.7,
     )
 
     # Create embedder configuration if using litellm proxy
@@ -711,14 +711,13 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         # CrewBuilder handles task context resolution!
         crew = crew_def.as_crew(
             llm=llm,
-            job_id=jobCtxt.job_id,
             planning_llm=planning_llm,
             embedder=embedder_config,
             inputs_dir=inputs_dir,
-            jwt_token=jwt_token,
             knowledge_sources=knowledge_sources,
             memory=False,
             verbose=False,
+            job_context=jobCtxt
             # planning value now comes from crew_spec.planning (defaults to False)
         )
 

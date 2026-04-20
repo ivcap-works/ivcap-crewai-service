@@ -37,12 +37,14 @@ from crewai.types.usage_metrics import UsageMetrics
 #from langchain_core.agents import AgentAction, AgentFinish
 from ivcap_client import IVCAP
 from ivcap_tool import ivcap_tool_test
+from ivcap_service import JobContext
 from vectordb import create_vectordb_config
 
 from events import EventListener
 EventListener()
 
 IVCAP_BASE_URL = os.environ.get("IVCAP_BASE_URL", "http://ivcap.local")
+AGENT_MAX_EXECUTION_TIME = int(os.environ.get("AGENT_MAX_EXECUTION_TIME", 300))
 
 @dataclass
 class Context():
@@ -59,12 +61,11 @@ class Context():
     Updated: tmp_dir now configurable via IVCAP_RUNS_BASE_DIR environment variable (default: /tmp)
     """
     vectordb_config: dict
-    job_id: str
+    job_context: JobContext
     tmp_dir: str = None  # Set from IVCAP_RUNS_BASE_DIR environment variable
 
     # Optional features (backward compatible)
     inputs_dir: Optional[str] = None
-    jwt_token: Optional[str] = None
     llm_factory: Optional[Any] = None
     citation_manager: Optional[Any] = None
     embedder: Optional[dict] = None
@@ -74,6 +75,14 @@ class Context():
         if self.tmp_dir is None:
             self.tmp_dir = os.getenv("IVCAP_RUNS_BASE_DIR", "/tmp")
 
+    @property
+    def job_id(self):
+        return self.job_context.job_id
+    
+    @property
+    def jwt_token(self):
+        return self.job_context.job_authorization
+    
 supported_tools = {}
 def add_supported_tools(tools: dict[str, Callable[['ToolA'], BaseTool]]):
 # def add_supported_tools(tools: dict[str, Callable[['ToolA'], Any]]):
@@ -218,8 +227,9 @@ class AgentA(BaseModel):
                 d.pop('llm', None)  # Use crew's LLM
             
             d.update(**kwargs)
-            a = Agent(**d)
-            return a
+            d["max_execution_time"]=AGENT_MAX_EXECUTION_TIME
+            agent = Agent(**d)
+            return agent
         except Exception as err:
             raise err
 
@@ -317,11 +327,10 @@ class CrewA(BaseModel):
     def as_crew(
         self,
         llm: LLM,
-        job_id: str,
+        job_context: JobContext,
         planning_llm: Optional[LLM] = None,
         embedder: Optional[dict] = None,
         inputs_dir: Optional[str] = None,
-        jwt_token: Optional[str] = None,
         knowledge_sources: Optional[list] = None,
         **kwargs
     ) -> Crew:
@@ -341,14 +350,15 @@ class CrewA(BaseModel):
         from llm_factory import get_llm_factory
         from crew_builder import CrewBuilder
         
+        job_id = job_context.job_id
+        jwt_token = job_context.job_authorization
         # Build context
         ctxt = Context(
             vectordb_config=create_vectordb_config(job_id, jwt_token),
-            job_id=job_id,
             inputs_dir=inputs_dir,
-            jwt_token=jwt_token,
             llm_factory=get_llm_factory() if jwt_token else None,
             embedder=embedder,
+            job_context=job_context,
             citation_manager=None  # Not implemented in this version
         )
         
