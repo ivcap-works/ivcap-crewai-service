@@ -829,6 +829,7 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
             f"Response ready: {len(response.answer)} chars, "
             f"{len(response.task_responses)} tasks"
         )
+        logger.info("\n\n %s", response)
 
         return response
 
