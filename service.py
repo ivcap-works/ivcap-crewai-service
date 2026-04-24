@@ -148,7 +148,7 @@ class CrewResponse(BaseModel):
     answer: str = Field(description="Final crew output")
     crew_name: str = Field(description="Name of executed crew")
     place_holders: list = Field(description="Placeholders used")
-    task_responses: list[TaskResponse] = Field(description="Individual task outputs")
+    task_responses: Optional[list[TaskResponse]] = Field(description="Individual task outputs", default_factory=list)
     created_at: str = Field(description="Execution timestamp")
     process_time_sec: float = Field(description="CPU time")
     run_time_sec: float = Field(description="Wall clock time")
@@ -769,7 +769,10 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
             additional_information += "Read the files in your directory to extract useful information."
         req.inputs["additional_information"] = additional_information
         logger.info("Starting crew with inputs %s", req.inputs)
-        crew_result = crew.kickoff(req.inputs)
+        try:
+            crew_result = crew.kickoff(req.inputs)
+        except:
+            logger.exception("error when executing crew")
 
         end_time = (time.process_time(), time.time())
         logger.info(f"✓ Crew execution complete")
@@ -818,9 +821,9 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
             answer=crew_result.raw,
             crew_name=req.name,
             place_holders=[],
-            task_responses=[
-                TaskResponse.from_task_output(r) for r in crew_result.tasks_output
-            ],
+            # task_responses=[
+            #     TaskResponse.from_task_output(r) for r in crew_result.tasks_output
+            # ],
             created_at=datetime.datetime.now()
             .astimezone()
             .replace(microsecond=0)
