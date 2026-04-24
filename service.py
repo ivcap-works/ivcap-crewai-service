@@ -30,6 +30,7 @@ Changes:
 import datetime
 import os
 import time
+import json
 import shutil
 from pathlib import Path
 from typing import Optional, Union
@@ -750,10 +751,15 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         additional_information = ""
         if download_result and download_result.has_service_outputs:
             try:
-                ks = JSONKnowledgeSource(
-                    file_paths=download_result.service_output_files
-                )
-                additional_information += "\n\n".join(ks.content.values())
+                # ks = JSONKnowledgeSource(
+                #     file_paths=download_result.service_output_files
+                # )
+                for json_file in download_result.service_output_files:
+                    data = None
+                    with json_file.open('r', encoding='utf=8') as f:
+                        data = json.load(f)
+                    if data:
+                        additional_information += f"\n\n{data.get("answer")}"
                 logger.info(
                     f"✓ Loaded {len(download_result.service_output_files)} service output(s) as additional_information"
                 )
