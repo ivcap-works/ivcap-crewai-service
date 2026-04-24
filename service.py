@@ -755,11 +755,11 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
                 #     file_paths=download_result.service_output_files
                 # )
                 for op_file in download_result.service_output_files:
-                    data = None
+                    data = {}
                     with op_file.open('r', encoding='utf=8') as json_file:
                         data = json.load(json_file)
-                    if data:
-                        additional_information += f"\n\n{data.get("answer")}"
+                        if data and "answer" in data:
+                            additional_information += "\n\n" + data.get("answer", "")
                 logger.info(
                     f"✓ Loaded {len(download_result.service_output_files)} service output(s) as additional_information"
                 )
