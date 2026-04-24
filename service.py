@@ -754,10 +754,10 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
                 # ks = JSONKnowledgeSource(
                 #     file_paths=download_result.service_output_files
                 # )
-                for json_file in download_result.service_output_files:
+                for op_file in download_result.service_output_files:
                     data = None
-                    with json_file.open('r', encoding='utf=8') as f:
-                        data = json.load(f)
+                    with op_file.open('r', encoding='utf=8') as json_file:
+                        data = json.load(json_file)
                     if data:
                         additional_information += f"\n\n{data.get("answer")}"
                 logger.info(
