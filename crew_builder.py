@@ -8,7 +8,7 @@ Changes:
 - This is THE key component that fixes task-to-task content passing
 - Added embedder parameter support for JWT-authenticated embeddings via LiteLLM proxy
 """
-
+import random
 from typing import Dict, List, Optional
 from crewai import Agent, Task, Crew, Process
 from ivcap_service import getLogger
@@ -220,6 +220,16 @@ class CrewBuilder:
             )
             result = crew.kickoff(inputs={"topic": "AI"})
         """
+        event_reporter = self.context.job_context.report
+
+        def log_task_callback(task_outputs):
+            from events import _TaskFinishedEvent
+
+            logger.info("Sending event to ivcap %s, reporter %s", task_outputs.name, event_reporter)
+            event = _TaskFinishedEvent(id=random.randint(1, 10000), output=task_outputs.raw, agent=task_outputs.name)
+            event_reporter.emit(event)
+
+
         logger.info(f"Building crew: {crew_spec.name}")
         
         # Step 1: Build agents
@@ -269,7 +279,7 @@ class CrewBuilder:
             f"Crew config: {len(agents)} agents, {len(tasks)} tasks, "
             f"process={process.value}"
         )
-        
+        crew_config["task_callback"] = log_task_callback
         crew = Crew(**crew_config)
         return crew
 

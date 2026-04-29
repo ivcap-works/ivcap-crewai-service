@@ -30,6 +30,7 @@ Changes:
 import datetime
 import os
 import time
+import json
 import shutil
 from pathlib import Path
 from typing import Optional, Union
@@ -147,7 +148,7 @@ class CrewResponse(BaseModel):
     answer: str = Field(description="Final crew output")
     crew_name: str = Field(description="Name of executed crew")
     place_holders: list = Field(description="Placeholders used")
-    task_responses: list[TaskResponse] = Field(description="Individual task outputs")
+    task_responses: Optional[list[TaskResponse]] = Field(description="Individual task outputs", default_factory=list)
     created_at: str = Field(description="Execution timestamp")
     process_time_sec: float = Field(description="CPU time")
     run_time_sec: float = Field(description="Wall clock time")
@@ -711,14 +712,13 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         # CrewBuilder handles task context resolution!
         crew = crew_def.as_crew(
             llm=llm,
-            job_id=jobCtxt.job_id,
             planning_llm=planning_llm,
             embedder=embedder_config,
             inputs_dir=inputs_dir,
-            jwt_token=jwt_token,
             knowledge_sources=knowledge_sources,
             memory=False,
             verbose=False,
+            job_context=jobCtxt
             # planning value now comes from crew_spec.planning (defaults to False)
         )
 
@@ -751,10 +751,15 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         additional_information = ""
         if download_result and download_result.has_service_outputs:
             try:
-                ks = JSONKnowledgeSource(
-                    file_paths=download_result.service_output_files
-                )
-                additional_information += "\n\n".join(ks.content.values())
+                # ks = JSONKnowledgeSource(
+                #     file_paths=download_result.service_output_files
+                # )
+                for op_file in download_result.service_output_files:
+                    data = {}
+                    with op_file.open('r', encoding='utf=8') as json_file:
+                        data = json.load(json_file)
+                        if data and "answer" in data:
+                            additional_information += "\n\n" + data.get("answer", "")
                 logger.info(
                     f"✓ Loaded {len(download_result.service_output_files)} service output(s) as additional_information"
                 )
@@ -764,7 +769,10 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
             additional_information += "Read the files in your directory to extract useful information."
         req.inputs["additional_information"] = additional_information
         logger.info("Starting crew with inputs %s", req.inputs)
-        crew_result = crew.kickoff(req.inputs)
+        try:
+            crew_result = crew.kickoff(req.inputs)
+        except:
+            logger.exception("error when executing crew")
 
         end_time = (time.process_time(), time.time())
         logger.info(f"✓ Crew execution complete")
@@ -814,7 +822,7 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
             crew_name=req.name,
             place_holders=[],
             task_responses=[
-                TaskResponse.from_task_output(r) for r in crew_result.tasks_output
+                # TaskResponse.from_task_output(r) for r in crew_result.tasks_output
             ],
             created_at=datetime.datetime.now()
             .astimezone()
@@ -830,6 +838,7 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
             f"Response ready: {len(response.answer)} chars, "
             f"{len(response.task_responses)} tasks"
         )
+        logger.info("\n\n %s", response)
 
         return response
 
