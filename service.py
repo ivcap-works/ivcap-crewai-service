@@ -59,7 +59,7 @@ from crewai_tools import (
     ScrapeWebsiteTool,
     JSONSearchTool, WebsiteSearchTool
 )
-from crewai.knowledge.source.json_knowledge_source import JSONKnowledgeSource
+from fastapi.exceptions import HTTPException
 
 from ivcap_service import getLogger, Service, JobContext, get_secret
 from ivcap_ai_tool import start_tool_server, ToolOptions, ivcap_ai_tool, logging_init
@@ -769,10 +769,12 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
             additional_information += "Read the files in your directory to extract useful information."
         req.inputs["additional_information"] = additional_information
         logger.info("Starting crew with inputs %s", req.inputs)
+        crew_result = None
         try:
             crew_result = crew.kickoff(req.inputs)
-        except:
+        except Exception as exp:
             logger.exception("error when executing crew")
+            raise HTTPException(status_code=503, detail="Error in Crewai execution") from exp
 
         end_time = (time.process_time(), time.time())
         logger.info(f"✓ Crew execution complete")
