@@ -20,8 +20,12 @@ dependencies = [
     "ivcap-client (==0.44.4)",
     "ivcap-service (==0.6.16)",
     "python-dotenv>=1.2.1",
-    "pytest>=9.0.2",
     "google-genai>=1.64.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=9.0.2",
 ]
 
 [tool.poetry]
