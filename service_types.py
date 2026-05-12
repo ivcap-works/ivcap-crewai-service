@@ -385,9 +385,9 @@ class TaskResponse(BaseModel):
     @classmethod
     def from_task_output(cls, to: TaskOutput):
         return cls(
-            description=to.description,
+            description=json.dumps(to.description, ensure_ascii=False),
             summary=to.summary,
-            raw=to.raw,
+            raw=json.dumps(to.raw, ensure_ascii=False),
             agent=to.agent
         )
 
