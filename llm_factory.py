@@ -11,6 +11,7 @@ Changes:
 import os
 from typing import Optional
 from crewai import LLM
+from crewai.llms.constants import GEMINI_MODELS
 from crewai.rag.embeddings.providers.openai import OpenAIProviderSpec
 from ivcap_service import getLogger
 
@@ -113,7 +114,14 @@ class LLMFactory:
                 },
                 **kwargs
             }
-            
+            if model in GEMINI_MODELS:
+                llm_config["client_params"] = {
+                    "api_key": jwt_token,
+                    "http_options": {
+                        "base_url": self.litellm_proxy_url,
+                        "headers": { "Authorization": f"Bearer {jwt_token}"}            
+                    }
+                }                 
             try:
                 llm = LLM(**llm_config)
                 logger.info(f"✓ LLM created: {model} via proxy with JWT")
