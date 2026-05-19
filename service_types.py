@@ -110,6 +110,7 @@ class ToolA(BaseModel):
     id: str = Field(description="id of tool, either an IVCAP service urn, or a builtin one")
     name: Optional[str] = Field(None, description="name of tool")
     opts: Optional[dict] = Field({}, description="optional options provided to the tool")
+    description: Optional[str] = Field(default="", description="description of tool")
 
     def as_crew_tool(self, ctxt: Context) -> BaseTool:
         try:
