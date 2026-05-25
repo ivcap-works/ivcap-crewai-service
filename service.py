@@ -59,7 +59,7 @@ from crewai_tools import (
     ScrapeWebsiteTool,
     JSONSearchTool, WebsiteSearchTool
 )
-from crewai.knowledge.source.json_knowledge_source import JSONKnowledgeSource
+from fastapi.exceptions import HTTPException
 
 from ivcap_service import getLogger, Service, JobContext, get_secret
 from ivcap_ai_tool import start_tool_server, ToolOptions, ivcap_ai_tool, logging_init
@@ -71,6 +71,7 @@ from llm_factory import get_llm_factory
 from ivcap_langgraph_tool import create_langgraph_tool
 
 from tools.search import WebsiteSearchToolWithLinks, SerperDevToolWithLinks
+from tools.helpers import ResilientPDFSearchTool, ResilientWebsiteSearchTool
 from tools.url_metadata_extractor import URLMetadataExtractor
 from download_manager import DownloadManager, DownloadResult
 
@@ -184,7 +185,7 @@ add_supported_tools(
             # NO config needed - uses Crew's embedder automatically!
         ),
         # PDFSearchTool - for semantic search within PDF documents (inherits embedder from Crew)
-        "urn:sd-core:crewai.builtin.pdfSearchTool": lambda _, ctxt: PDFSearchTool(config={"embedding_model": ctxt.embedder, "vectordb": ctxt.vectordb_config.get("vectordb")}, collection_name=f"crew_{ctxt.job_id}"
+        "urn:sd-core:crewai.builtin.pdfSearchTool": lambda tool_config, ctxt: ResilientPDFSearchTool(description=tool_config.description, config={"embedding_model": ctxt.embedder, "vectordb": ctxt.vectordb_config.get("vectordb")}, collection_name=f"crew_{ctxt.job_id}"
                                                                                   ),
         # FileReadTool - requires inputs_dir for base path
         "urn:sd-core:crewai.builtin.fileReadTool": lambda _, ctxt: FileReadTool(
@@ -196,7 +197,7 @@ add_supported_tools(
         #     links_file=f"{ctxt.tmp_dir}/runs/{ctxt.job_id}/website_links.json",
         #     collection_name=f"crew_{ctxt.job_id}",
         # )
-        "urn:sd-core:crewai.builtin.websiteSearchTool": lambda _, ctxt: WebsiteSearchTool(config={"embedding_model": ctxt.embedder, "vectordb": ctxt.vectordb_config.get("vectordb")}, collection_name=f"crew_{ctxt.job_id}"),
+        "urn:sd-core:crewai.builtin.websiteSearchTool": lambda tool_config, ctxt: ResilientWebsiteSearchTool(description=tool_config.description, config={"embedding_model": ctxt.embedder, "vectordb": ctxt.vectordb_config.get("vectordb")}, collection_name=f"crew_{ctxt.job_id}"),
         # URL Metadata Extractor - fetches URL and extracts metadata using Claude
         "urn:sd-core:crewai.builtin.urlMetadataExtractor": lambda _, ctxt: URLMetadataExtractor(
             jwt_token=ctxt.jwt_token,
@@ -348,7 +349,7 @@ def load_crew_definition(req: CrewRequest, ivcap: IVCAP) -> CrewA:
 
 
 def create_authenticated_llm(
-    jwt_token: Optional[str], inputs: Optional[dict]
+    jwt_token: Optional[str], inputs: Optional[dict], llm_configs: Optional[dict]=None
 ) -> tuple[LLM, LLM, Optional[dict], Optional[str]]:
     """
     Create LLM instances with JWT authentication and embedder configuration.
@@ -356,6 +357,7 @@ def create_authenticated_llm(
     Args:
         jwt_token: JWT token from JobContext
         inputs: Request inputs (may contain llm_model override)
+       llm_configs: Optional additional LLM configuration parameters from crew definition
 
     Returns:
         Tuple of (main_llm, planning_llm, embedder_config, litellm_proxy_url)
@@ -364,19 +366,17 @@ def create_authenticated_llm(
 
     # Check for model override in inputs
     model_override = inputs.get("llm_model") if inputs else None
-
-    llm = factory.create_llm(
-        jwt_token=jwt_token,
-        model=model_override,
-        temperature=0.7,
-    )
+    llm_params = {
+        "jwt_token": jwt_token,
+        "model": model_override,
+        "temperature": 0.7
+    }
+    if llm_configs:
+        llm_params = llm_params | llm_configs  # Merge with crew-level LLM configs
+    llm = factory.create_llm(**llm_params)
 
     # Create planning LLM (same model, same auth)
-    planning_llm = factory.create_llm(
-        jwt_token=jwt_token,
-        model=model_override,
-        temperature=0.7,
-    )
+    planning_llm = factory.create_llm(**llm_params)
 
     # Create embedder configuration if using litellm proxy
     embedder_config = None
@@ -661,7 +661,7 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
 
         # ==================== STEP 5: CREATE LLM ====================
         llm, planning_llm, embedder_config, litellm_proxy_url = (
-            create_authenticated_llm(jwt_token, req.inputs)
+            create_authenticated_llm(jwt_token, req.inputs, crew_def.llm_configs)
         )
 
         # Test LLMs to validate authentication
@@ -769,10 +769,12 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
             additional_information += "Read the files in your directory to extract useful information."
         req.inputs["additional_information"] = additional_information
         logger.info("Starting crew with inputs %s", req.inputs)
+        crew_result = None
         try:
             crew_result = crew.kickoff(req.inputs)
-        except:
+        except Exception as exp:
             logger.exception("error when executing crew")
+            raise HTTPException(status_code=503, detail="Error in Crewai execution") from exp
 
         end_time = (time.process_time(), time.time())
         logger.info(f"✓ Crew execution complete")

@@ -112,8 +112,7 @@ class LLMFactory:
                     "Authorization": f"Bearer {jwt_token}"  # Standard OAuth2
                 },
                 **kwargs
-            }
-            
+            }               
             try:
                 llm = LLM(**llm_config)
                 logger.info(f"✓ LLM created: {model} via proxy with JWT")

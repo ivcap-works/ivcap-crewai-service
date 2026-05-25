@@ -9,20 +9,10 @@ Changes:
 - Prevents None tool values that would cause agent creation to fail
 """
 
-from contextlib import redirect_stdout
 from dataclasses import dataclass
-import datetime
-import json
-import logging
 import os
-import time
-import logging
-import sys
-from functools import reduce
-
 from typing import Any, Callable, ClassVar, Dict, List, Optional, Tuple, Type, Union
 
-import sys
 from urllib.parse import urlencode, urljoin
 import requests
 from pydantic import Field, BaseModel
@@ -30,18 +20,14 @@ from crewai import Agent, Task, Crew, Process, LLM
 from crewai.tasks import TaskOutput
 from crewai.tools.base_tool import BaseTool
 
-from dotenv import load_dotenv
-#from crewai_tools import SerperDevTool, DirectoryReadTool, FileReadTool, WebsiteSearchTool
-from crewai_tools import WebsiteSearchTool
-from crewai.types.usage_metrics import UsageMetrics
-#from langchain_core.agents import AgentAction, AgentFinish
 from ivcap_client import IVCAP
 from ivcap_tool import ivcap_tool_test
-from ivcap_service import JobContext
+from ivcap_service import JobContext, getLogger
 from vectordb import create_vectordb_config
 
 from events import EventListener
 EventListener()
+logger = getLogger(__name__)
 
 IVCAP_BASE_URL = os.environ.get("IVCAP_BASE_URL", "http://ivcap.local")
 AGENT_MAX_EXECUTION_TIME = int(os.environ.get("AGENT_MAX_EXECUTION_TIME", 300))
@@ -124,6 +110,7 @@ class ToolA(BaseModel):
     id: str = Field(description="id of tool, either an IVCAP service urn, or a builtin one")
     name: Optional[str] = Field(None, description="name of tool")
     opts: Optional[dict] = Field({}, description="optional options provided to the tool")
+    description: Optional[str] = Field(default="", description="description of tool")
 
     def as_crew_tool(self, ctxt: Context) -> BaseTool:
         try:
@@ -161,6 +148,7 @@ class AgentA(BaseModel):
     memory: bool = Field(False, description="use memory")
     allow_delegation: bool = Field(False, description="allow for delegation to other agents")
     tools: List[ToolA] = Field([], description="list of tools the agent can use")
+    llm_configs: Optional[dict]= Field(None, description="Optional additional LLM configuration parameters")
 
     def as_crew_agent(self, ctxt: Context, **kwargs) -> Agent:
         """
@@ -188,8 +176,7 @@ class AgentA(BaseModel):
             for t in self.tools:
                 # Skip artifact-dependent tools when no inputs_dir available
                 if t.id in artifact_dependent_tools and not ctxt.inputs_dir:
-                    import logging
-                    logging.getLogger("app.crew_builder").info(
+                    logger.info(
                         f"Skipping tool {t.name} for agent {self.name} - no artifacts provided"
                     )
                     continue
@@ -208,17 +195,23 @@ class AgentA(BaseModel):
             
             # Per-agent custom LLM
             if self.llm and ctxt.llm_factory and ctxt.jwt_token:
+                llm_params = {
+                    "temperature": 0.7,
+                    "max_tokens": 4000,
+                }
+                if self.llm_configs:
+                    llm_params.update(self.llm_configs)
+
+                logger.info("Creating custom LLM for agent %s with model %s and params %s", self.name, self.llm, llm_params)
                 try:
                     custom_llm = ctxt.llm_factory.create_llm(
                         jwt_token=ctxt.jwt_token,
                         model=self.llm,
-                        temperature=0.7,
-                        max_tokens=4000
+                        **llm_params
                     )
                     d['llm'] = custom_llm
                 except Exception as e:
-                    import logging
-                    logging.warning(
+                    logger.warning(
                         f"Failed to create custom LLM for agent {self.name}: {e}. "
                         f"Using crew default."
                     )
@@ -303,6 +296,7 @@ class CrewA(BaseModel):
     placeholders: List[str] = Field(None, description="optional list of placeholders used in goal and backstories")
     tasks: List[TaskA] = Field(description="list of tasks to perform in this crew")
     agents: List[AgentA] = Field(description="list of agents in this crew")
+    llm_configs: Optional[dict] = Field(None, description="Optional additional LLM configuration parameters to be used as default for agents without custom LLMs")
 
     planning: Optional[bool] = Field(
         default=False,
