@@ -826,7 +826,7 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
             crew_name=req.name,
             place_holders=[],
             task_responses=[
-                # TaskResponse.from_task_output(r) for r in crew_result.tasks_output
+                TaskResponse.from_task_output(r) for r in crew_result.tasks_output
             ],
             created_at=datetime.datetime.now()
             .astimezone()
