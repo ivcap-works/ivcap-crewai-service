@@ -74,7 +74,7 @@ from tools.search import WebsiteSearchToolWithLinks, SerperDevToolWithLinks
 from tools.helpers import ResilientPDFSearchTool, ResilientWebsiteSearchTool
 from tools.url_metadata_extractor import URLMetadataExtractor
 from download_manager import DownloadManager, DownloadResult
-from opentelemetry import metrics
+
 
 # Initialize logging
 load_dotenv()
