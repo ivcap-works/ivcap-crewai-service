@@ -371,6 +371,7 @@ class CrewA(BaseModel):
         return crew
 
 class TaskResponse(BaseModel):
+    jschema: str = Field("urn:sd-core:schema.crewai.taskresponse.1", alias="$schema")
     agent: str
     description: str
     summary: str

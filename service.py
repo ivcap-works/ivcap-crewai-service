@@ -75,6 +75,7 @@ from tools.helpers import ResilientPDFSearchTool, ResilientWebsiteSearchTool
 from tools.url_metadata_extractor import URLMetadataExtractor
 from download_manager import DownloadManager, DownloadResult
 
+
 # Initialize logging
 load_dotenv()
 logging_init("./logging.json")
@@ -106,7 +107,6 @@ service = Service(
 # ============================================================================
 # REQUEST / RESPONSE MODELS
 # ============================================================================
-
 
 class CrewRequest(BaseModel):
     """Request to execute a CrewAI crew."""
@@ -841,7 +841,6 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
             f"{len(response.task_responses)} tasks"
         )
         logger.info("\n\n %s", response)
-
         return response
 
     finally:
