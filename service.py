@@ -107,8 +107,6 @@ service = Service(
 # ============================================================================
 # REQUEST / RESPONSE MODELS
 # ============================================================================
-meter = metrics.get_meter("ivcap.service.crewai")
-success_counter = meter.create_counter("request_success_count", description="Counts successful crew executions")
 
 class CrewRequest(BaseModel):
     """Request to execute a CrewAI crew."""
@@ -843,7 +841,6 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
             f"{len(response.task_responses)} tasks"
         )
         logger.info("\n\n %s", response)
-        success_counter.add(1)
         return response
 
     finally:
