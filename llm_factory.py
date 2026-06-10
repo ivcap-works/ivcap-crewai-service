@@ -42,25 +42,9 @@ class LLMFactory:
         # Without JWT (development)
         llm = factory.create_llm(model="gpt-3.5-turbo")
     """
-    
-    def __init__(self, litellm_proxy_url: Optional[str] = None):
-        """
-        Initialize LLM factory.
-        
-        Args:
-            litellm_proxy_url: Override proxy URL (defaults to env var)
-        """
-        self.litellm_proxy_url = (
-            litellm_proxy_url or os.getenv("LITELLM_PROXY")
-        )
-        self.default_model = os.getenv("LITELLM_DEFAULT_MODEL", "gpt-4.1")
-        self.fallback_model = os.getenv("LITELLM_FALLBACK_MODEL", "gpt-3.5-turbo")
-        
-        logger.info(
-            f"LLMFactory initialized: "
-            f"proxy={self.litellm_proxy_url}, "
-            f"default_model={self.default_model}"
-        )
+    litellm_proxy_url = os.getenv("LITELLM_PROXY")
+    default_model = os.getenv("LITELLM_DEFAULT_MODEL", "gpt-4.1")
+    fallback_model = os.getenv("LITELLM_FALLBACK_MODEL", "gpt-3.5-turbo")
     
     def create_llm(
         self,
@@ -169,7 +153,7 @@ class LLMFactory:
             f"jwt={'present' if jwt_token else 'missing'}, "
             f"openai_key={'present' if openai_key else 'missing'}"
         )
-    
+
     def create_embedder_config(self, jwt_token: str) -> dict:
         """
         Create embedder configuration for CrewAI embeddings.
