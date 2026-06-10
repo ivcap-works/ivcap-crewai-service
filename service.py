@@ -36,6 +36,8 @@ from pathlib import Path
 from typing import Optional, Union
 from dotenv import load_dotenv
 
+load_dotenv()
+
 # Disable telemetry BEFORE importing CrewAI
 os.environ["OTEL_SDK_DISABLED"] = "true"
 os.environ["CREWAI_DISABLE_TELEMETRY"] = "true"
@@ -77,7 +79,6 @@ from download_manager import DownloadManager, DownloadResult
 
 
 # Initialize logging
-load_dotenv()
 logging_init("./logging.json")
 logger = getLogger("app")
 
