@@ -139,7 +139,7 @@ class ResilientPDFSearchTool(_SourceRefAdapterMixin, PDFSearchTool):
         limit: int | None = None,
     ) -> str:
         try:
-            query = self._rewrite_query(query)
+            # query = self._rewrite_query(query)
             logger.info("[🔍 Searching PDF: %s | query: %s]", pdf, query)
             # When bound to a fixed PDF at construction the agent passes only
             # `query`; fall back to the stored pdf in that case.
@@ -177,11 +177,13 @@ class ResilientWebsiteSearchTool(_SourceRefAdapterMixin, WebsiteSearchTool):
         limit: int | None = None,
     ) -> str:
         try:
-            search_query = self._rewrite_query(search_query)
+            # search_query = self._rewrite_query(search_query)
             logger.info("[🔍 Searching website: %s | query: %s]", website, search_query)
             if website is not None:
                 self.add(website)
-            return self._query_with_source(search_query, website, similarity_threshold, limit)
+            response = self._query_with_source(search_query, website, similarity_threshold, limit)
+            logger.info("[✅ Website search successful. Response: %s]", response)
+            return response
 
         except Exception as e:
             error_msg = str(e)
