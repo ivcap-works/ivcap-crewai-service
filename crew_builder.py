@@ -226,6 +226,7 @@ class CrewBuilder:
             from events import _TaskFinishedEvent
 
             logger.info("Sending event to ivcap %s, reporter %s", task_outputs.name, event_reporter)
+            logger.info("Task '%s' finished with output: %s", task_outputs.name, task_outputs.raw)
             event = _TaskFinishedEvent(id=random.randint(1, 10000), output=task_outputs.raw, agent=task_outputs.name)
             event_reporter.emit(event)
 
