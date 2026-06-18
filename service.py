@@ -73,8 +73,11 @@ from llm_factory import get_llm_factory
 from ivcap_langgraph_tool import create_langgraph_tool
 
 from tools.search import WebsiteSearchToolWithLinks, SerperDevToolWithLinks
-from tools.helpers import ResilientPDFSearchTool, ResilientWebsiteSearchTool
+from tools.helpers import ResilientPDFSearchTool, ResilientWebsiteSearchTool, GooglePatentsSearchTool
 from tools.url_metadata_extractor import URLMetadataExtractor
+from tools.mesh import PubMedSubjectSearchBuilderTool
+from tools.pubmed import PubMedSearchByPMIDsTool, PubMedSearchByTermTool
+
 from download_manager import DownloadManager, DownloadResult
 
 
@@ -213,6 +216,15 @@ add_supported_tools(
         "urn:sd-core:crewai.builtin.JSONSearchTool": lambda _, ctxt: JSONSearchTool(
             collection_name=f"crew_{ctxt.job_id}"
         ),
+        # PubMed EBP Search Builder - translates a clinical scenario into a
+        # PubMed Simple Subject Search (PICO framing + keyword extraction).
+        # Builds its LLM through the factory so it authenticates via the JWT.
+        "urn:sd-core:crewai.builtin.pubMedSubjectSearchBuilderTool": lambda _, ctxt: PubMedSubjectSearchBuilderTool(
+            jwt_token=ctxt.jwt_token
+        ),
+        "urn:sd-core:crewai.builtin.pubMedSearchByTermTool": lambda _, ctxt: PubMedSearchByTermTool(),
+        "urn:sd-core:crewai.builtin.googlePatentsSearchTool": lambda _, ctxt: GooglePatentsSearchTool(),
+        "urn:sd-core:crewai.builtin.pubMedSearchByPMIDTool": lambda _, ctxt: PubMedSearchByPMIDsTool(),
     }
 )
 

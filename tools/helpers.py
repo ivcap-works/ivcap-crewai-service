@@ -1,4 +1,4 @@
-from crewai_tools import PDFSearchTool, WebsiteSearchTool
+from crewai_tools import PDFSearchTool, WebsiteSearchTool, SerperDevTool
 from pydantic import model_validator
 from typing_extensions import Self
 
@@ -181,9 +181,7 @@ class ResilientWebsiteSearchTool(_SourceRefAdapterMixin, WebsiteSearchTool):
             logger.info("[🔍 Searching website: %s | query: %s]", website, search_query)
             if website is not None:
                 self.add(website)
-            response = self._query_with_source(search_query, website, similarity_threshold, limit)
-            logger.info("[✅ Website search successful. Response: %s]", response)
-            return response
+            return self._query_with_source(search_query, website, similarity_threshold, limit)
 
         except Exception as e:
             error_msg = str(e)
@@ -193,3 +191,19 @@ class ResilientWebsiteSearchTool(_SourceRefAdapterMixin, WebsiteSearchTool):
                 f"THOUGHT GUIDANCE: The search failed. Please rephrase your "
                 f"search query, use different keywords, otherwise return the final answer based on the information you have. Do not attempt to search again."
             )
+
+
+
+class GooglePatentsSearchTool(SerperDevTool):
+    name: str = "Google Patents Search"
+    description: str = (
+        "A tool specialized in searching Google Patents. "
+        "Input should be a specific search query or keywords related to patents."
+    )
+
+    def _run(self, search_query: str, **kwargs) -> str:
+        # Prefix the query to target the Google Patents domain
+        patent_query = f"site:patents.google.com {search_query}"
+        
+        # Pass the modified query to the parent SerperDevTool implementation
+        return super()._run(search_query=patent_query, **kwargs)
