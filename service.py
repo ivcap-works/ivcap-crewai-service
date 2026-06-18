@@ -88,6 +88,7 @@ logger = getLogger("app")
 # for local test env, please set the SERPER_API_KEY explicitly
 try:
     get_secret("SERPER_API_KEY")
+    get_secret("NCBI_API_KEY")
 except Exception as e:
     logger.error(
         "failed to load SERPER_API_KEY key, will impact the SERPER search tool functionality %s",
