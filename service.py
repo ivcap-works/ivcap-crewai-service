@@ -76,7 +76,11 @@ from tools.search import WebsiteSearchToolWithLinks, SerperDevToolWithLinks
 from tools.helpers import ResilientPDFSearchTool, ResilientWebsiteSearchTool, GooglePatentsSearchTool
 from tools.url_metadata_extractor import URLMetadataExtractor
 from tools.mesh import PubMedSubjectSearchBuilderTool
-from tools.pubmed import PubMedSearchByPMIDsTool, PubMedSearchByTermTool
+from tools.pubmed import (
+    PubMedCentralSearchByTerm,
+    PubMedCentralSearchByPMCID,
+    PubMedCentralSearchByDOI,
+)
 
 from download_manager import DownloadManager, DownloadResult
 
@@ -223,9 +227,12 @@ add_supported_tools(
         "urn:sd-core:crewai.builtin.pubMedSubjectSearchBuilderTool": lambda _, ctxt: PubMedSubjectSearchBuilderTool(
             jwt_token=ctxt.jwt_token
         ),
-        "urn:sd-core:crewai.builtin.pubMedSearchByTermTool": lambda _, ctxt: PubMedSearchByTermTool(),
         "urn:sd-core:crewai.builtin.googlePatentsSearchTool": lambda _, ctxt: GooglePatentsSearchTool(),
-        "urn:sd-core:crewai.builtin.pubMedSearchByPMIDTool": lambda _, ctxt: PubMedSearchByPMIDsTool(),
+        # PubMed Central tools - search open-access scientific literature in PMC
+        # by search term, by PMCID, or by DOI (DOI is resolved to a PMCID first).
+        "urn:sd-core:crewai.builtin.pubMedCentralSearchByTerm": lambda _, ctxt: PubMedCentralSearchByTerm(),
+        "urn:sd-core:crewai.builtin.pubMedCentralSearchByPMCID": lambda _, ctxt: PubMedCentralSearchByPMCID(),
+        "urn:sd-core:crewai.builtin.pubMedCentralSearchByDOI": lambda _, ctxt: PubMedCentralSearchByDOI(),
     }
 )
 
@@ -862,7 +869,6 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         # Always cleanup artifacts and temporary files, even on failure
         if inputs_dir:
             download_mgr.cleanup()
-
         if crew and knowledge_sources:
             crew.reset_memories('knowledge')
         # Clean up researcher links file (used for reference validation)
@@ -874,6 +880,8 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
                 logger.info("Contents of directory %s removed successfully.", job_dir)
             except OSError:
                 logger.exception("Error when deleting job dir %s", job_dir)
+        if crew:
+            del crew
 
 
 # ============================================================================
