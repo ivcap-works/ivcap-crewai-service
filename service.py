@@ -84,7 +84,6 @@ from tools.pubmed import (
 
 from download_manager import DownloadManager, DownloadResult
 
-
 # Initialize logging
 logging_init("./logging.json")
 logger = getLogger("app")
@@ -397,7 +396,7 @@ def create_authenticated_llm(
     llm = factory.create_llm(**llm_params)
 
     # Create planning LLM (same model, same auth)
-    if "planning_llm" in llm_configs:
+    if llm_configs and "planning_llm" in llm_configs:
         llm_params["model"] = llm_configs["planning_llm"]
     planning_llm = factory.create_llm(**llm_params)
 
