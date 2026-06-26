@@ -124,9 +124,4 @@ Output format:
             return response
         except Exception as e:
             return f"Error building PubMed search: {str(e)}"
-        
 
-# token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6IkkyRVg2dFVkUnF4cmFDVmZON0lIciJ9.eyJpdmNhcC9jbGFpbXMvZ3JvdXBJZHMiOlsiM2JhZGFkODktYmY1YS00MjAzLTlmOGYtZDVmNTk5MDY3OTZjIl0sImFjYyI6IjNiYWRhZDg5LWJmNWEtNDIwMy05ZjhmLWQ1ZjU5OTA2Nzk2YyIsImlzcyI6Imh0dHBzOi8vaXZhcC5hdS5hdXRoMC5jb20vIiwic3ViIjoib2F1dGgyfEFBRnxjLTVsdEI0a1hYTG5WR0RIanFxRzh4d3FWQWlKemtleWJ6Q2hhXzlRdDlrIiwiYXVkIjpbImh0dHBzOi8vZGV2ZWxvcC5pdmNhcC5uZXQvIiwiaHR0cHM6Ly9pdmFwLmF1LmF1dGgwLmNvbS91c2VyaW5mbyJdLCJpYXQiOjE3ODE2NjI0MDEsImV4cCI6MTc4MTc0ODgwMSwic2NvcGUiOiJvcGVuaWQgcHJvZmlsZSBlbWFpbCBvZmZsaW5lX2FjY2VzcyIsImF6cCI6Ilo3eFI2YTZMcDRBOG5LaGQ1YUF1bDg5Zk1oUmJJMkRtIn0.UwuDTMC5Fju0ZLWRegbMNeWorCg_4GzH_Rlrr0JYsOqkHQkBoBVe-h7-F2P4u-NzIG1Yfr8fjfNwbQraFIz0cT9266H1vD9padGMo9vAhgzk01NkwgOAg0tgjyFju95d28bEVqt_JUycrJBKMfBFM7Bj1p-b27Zmg9aJxYVh4A1DqvIMcGmMAYeH5Wno1UYDvZffH8oYlwuaMfER8Ywa7sU1YmUmae6najzs6fRmXgg1MtlHsnG4pVS2f9bMZrJc6NpnCBCdT29TW0DEJXuV4GbDwVStFdXSIKVx7UrH6tGOufDZIZSPivp7A8SBAyn3XXoycUEmLr4UfjHX-1c8Ww"
-# pb_tool = PubMedSubjectSearchBuilderTool(jwt_token=token)
-# resp = pb_tool.run("Conduct a comprehensive biomedical patent landscape analysis focusing on small molecule ligands targeting influenza hemagglutinin (HA) for therapeutic purposes. Identify key patent families, prominent inventors, and active companies or research institutions holding these patents over the last 10-15 years. Summarise key claims and provide an overview of the intellectual property landscape.")
-# print(resp)
