@@ -36,6 +36,8 @@ from pathlib import Path
 from typing import Optional, Union
 from dotenv import load_dotenv
 
+load_dotenv()
+
 # Disable telemetry BEFORE importing CrewAI
 os.environ["OTEL_SDK_DISABLED"] = "true"
 os.environ["CREWAI_DISABLE_TELEMETRY"] = "true"
@@ -71,19 +73,25 @@ from llm_factory import get_llm_factory
 from ivcap_langgraph_tool import create_langgraph_tool
 
 from tools.search import WebsiteSearchToolWithLinks, SerperDevToolWithLinks
-from tools.helpers import ResilientPDFSearchTool, ResilientWebsiteSearchTool
+from tools.helpers import ResilientPDFSearchTool, ResilientWebsiteSearchTool, GooglePatentsSearchTool
 from tools.url_metadata_extractor import URLMetadataExtractor
+from tools.mesh import PubMedSubjectSearchBuilderTool
+from tools.pubmed import (
+    PubMedCentralSearchByTerm,
+    PubMedCentralSearchByPMCID,
+    PubMedCentralSearchByDOI,
+)
+
 from download_manager import DownloadManager, DownloadResult
 
-
 # Initialize logging
-load_dotenv()
 logging_init("./logging.json")
 logger = getLogger("app")
 
 # for local test env, please set the SERPER_API_KEY explicitly
 try:
     get_secret("SERPER_API_KEY")
+    get_secret("NCBI_API_KEY")
 except Exception as e:
     logger.error(
         "failed to load SERPER_API_KEY key, will impact the SERPER search tool functionality %s",
@@ -212,6 +220,18 @@ add_supported_tools(
         "urn:sd-core:crewai.builtin.JSONSearchTool": lambda _, ctxt: JSONSearchTool(
             collection_name=f"crew_{ctxt.job_id}"
         ),
+        # PubMed EBP Search Builder - translates a clinical scenario into a
+        # PubMed Simple Subject Search (PICO framing + keyword extraction).
+        # Builds its LLM through the factory so it authenticates via the JWT.
+        "urn:sd-core:crewai.builtin.pubMedSubjectSearchBuilderTool": lambda _, ctxt: PubMedSubjectSearchBuilderTool(
+            jwt_token=ctxt.jwt_token
+        ),
+        "urn:sd-core:crewai.builtin.googlePatentsSearchTool": lambda _, ctxt: GooglePatentsSearchTool(),
+        # PubMed Central tools - search open-access scientific literature in PMC
+        # by search term, by PMCID, or by DOI (DOI is resolved to a PMCID first).
+        "urn:sd-core:crewai.builtin.pubMedCentralSearchByTerm": lambda _, ctxt: PubMedCentralSearchByTerm(),
+        "urn:sd-core:crewai.builtin.pubMedCentralSearchByPMCID": lambda _, ctxt: PubMedCentralSearchByPMCID(),
+        "urn:sd-core:crewai.builtin.pubMedCentralSearchByDOI": lambda _, ctxt: PubMedCentralSearchByDOI(),
     }
 )
 
@@ -376,6 +396,8 @@ def create_authenticated_llm(
     llm = factory.create_llm(**llm_params)
 
     # Create planning LLM (same model, same auth)
+    if llm_configs and "planning_llm" in llm_configs:
+        llm_params["model"] = llm_configs["planning_llm"]
     planning_llm = factory.create_llm(**llm_params)
 
     # Create embedder configuration if using litellm proxy
@@ -848,7 +870,6 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         # Always cleanup artifacts and temporary files, even on failure
         if inputs_dir:
             download_mgr.cleanup()
-
         if crew and knowledge_sources:
             crew.reset_memories('knowledge')
         # Clean up researcher links file (used for reference validation)
@@ -860,6 +881,8 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
                 logger.info("Contents of directory %s removed successfully.", job_dir)
             except OSError:
                 logger.exception("Error when deleting job dir %s", job_dir)
+        if crew:
+            del crew
 
 
 # ============================================================================

@@ -149,6 +149,8 @@ class AgentA(BaseModel):
     allow_delegation: bool = Field(False, description="allow for delegation to other agents")
     tools: List[ToolA] = Field([], description="list of tools the agent can use")
     llm_configs: Optional[dict]= Field(None, description="Optional additional LLM configuration parameters")
+    reasoning: bool = Field(False, description="Whether the agent should use a reasoning process")
+    max_reasoning_attempts: int = Field(3, description="Maximum number of reasoning attempts the agent will make before giving up")
 
     def as_crew_agent(self, ctxt: Context, **kwargs) -> Agent:
         """

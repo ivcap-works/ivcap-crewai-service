@@ -1,9 +1,10 @@
-from crewai_tools import PDFSearchTool, WebsiteSearchTool
+from crewai_tools import PDFSearchTool, WebsiteSearchTool, SerperDevTool
 from pydantic import model_validator
 from typing_extensions import Self
 
 from ivcap_service import getLogger
 
+from llm_factory import get_llm_factory
 from tools.source_ref_rag_adapter import SourceRefRagAdapter
 
 logger = getLogger(__name__)
@@ -71,6 +72,54 @@ class _SourceRefAdapterMixin:
         )
         return f"Relevant Content:\n{content}"
 
+    def _jwt_from_config(self) -> str | None:
+        """Pull the JWT the tool was constructed with, if any.
+
+        The tool is built with ``config={"embedding_model": <embedder_config>, ...}``
+        (see ``service.py``), and the embedder config carries the job's JWT as its
+        ``api_key`` (also in ``default_headers.Authorization``). Reusing it lets the
+        query-rewrite LLM authenticate through the LiteLLM proxy exactly like the
+        embeddings do. Returns ``None`` when no embedder/JWT was configured.
+        """
+        cfg = getattr(self, "config", None) or {}
+        embedding_model = cfg.get("embedding_model") or {}
+        return embedding_model.get("config", {}).get("api_key")
+
+    def _rewrite_query(self, raw_query: str) -> str:
+        """Uses the default LLM to convert keywords into a semantic search query.
+
+        The LLM comes from :func:`get_llm_factory` so it inherits the service's
+        default model and authentication (LiteLLM proxy / fallback) instead of a
+        hard-coded direct OpenAI client. The job's JWT is pulled from the tool's
+        embedder config (see :meth:`_jwt_from_config`) so the rewrite call uses
+        the same proxy authentication as the embeddings. On any failure the
+        original query is returned unchanged so search never breaks because of
+        rewriting.
+        """
+        try:
+            jwt_token = self._jwt_from_config()
+            llm = get_llm_factory().create_llm(jwt_token=jwt_token, model="gpt-4.1", max_tokens=4000)
+            response = llm.call(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a search query optimizer. Convert the user's raw keywords "
+                            "into a single, clear, descriptive natural language question or statement "
+                            "ideal for semantic vector search in a document. "
+                            "Respond ONLY with the optimized query."
+                        ),
+                    },
+                    {"role": "user", "content": raw_query},
+                ]
+            )
+            rewritten = (str(response) if response else "").strip().strip('"')
+            logger.info("[🔄 raw query %s, Query rewritten: %s]", raw_query, rewritten)
+            return rewritten or raw_query
+        except Exception as e:
+            # Fallback to the original query if the LLM call fails
+            logger.warning("[⚠️ Query rewrite failed: %s]", e)
+            return raw_query
 
 class ResilientPDFSearchTool(_SourceRefAdapterMixin, PDFSearchTool):
     """
@@ -90,6 +139,7 @@ class ResilientPDFSearchTool(_SourceRefAdapterMixin, PDFSearchTool):
         limit: int | None = None,
     ) -> str:
         try:
+            # query = self._rewrite_query(query)
             logger.info("[🔍 Searching PDF: %s | query: %s]", pdf, query)
             # When bound to a fixed PDF at construction the agent passes only
             # `query`; fall back to the stored pdf in that case.
@@ -127,6 +177,7 @@ class ResilientWebsiteSearchTool(_SourceRefAdapterMixin, WebsiteSearchTool):
         limit: int | None = None,
     ) -> str:
         try:
+            # search_query = self._rewrite_query(search_query)
             logger.info("[🔍 Searching website: %s | query: %s]", website, search_query)
             if website is not None:
                 self.add(website)
@@ -140,3 +191,19 @@ class ResilientWebsiteSearchTool(_SourceRefAdapterMixin, WebsiteSearchTool):
                 f"THOUGHT GUIDANCE: The search failed. Please rephrase your "
                 f"search query, use different keywords, otherwise return the final answer based on the information you have. Do not attempt to search again."
             )
+
+
+
+class GooglePatentsSearchTool(SerperDevTool):
+    name: str = "Google Patents Search"
+    description: str = (
+        "A tool specialized in searching Google Patents. "
+        "Input should be a specific search query or keywords related to patents."
+    )
+
+    def _run(self, search_query: str, **kwargs) -> str:
+        # Prefix the query to target the Google Patents domain
+        patent_query = f"site:patents.google.com {search_query}"
+        
+        # Pass the modified query to the parent SerperDevTool implementation
+        return super()._run(search_query=patent_query, **kwargs)
