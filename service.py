@@ -27,13 +27,14 @@ Changes:
 - Added fail-fast validation: raises RuntimeError when artifact download fails
 """
 
+import asyncio
 import datetime
 import os
 import time
 import json
 import shutil
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -49,9 +50,7 @@ litellm.drop_params = True
 litellm.additional_drop_params = ["stop"]
 litellm.set_verbose = False  # Set to True for debugging
 
-from pydantic import BaseModel, Field, ConfigDict
 from crewai import LLM
-from crewai.types.usage_metrics import UsageMetrics
 from crewai_tools import (
     DirectoryReadTool,
     DirectorySearchTool,
@@ -69,6 +68,7 @@ from ivcap_client import IVCAP
 from ivcap_client.exception import ResourceNotFound
 
 from service_types import CrewA, TaskResponse, add_supported_tools
+from schemas import CrewRequest, CrewResponse
 from llm_factory import get_llm_factory
 from ivcap_langgraph_tool import create_langgraph_tool
 
@@ -83,6 +83,10 @@ from tools.pubmed import (
 )
 
 from download_manager import DownloadManager, DownloadResult
+from eval_uploader import (
+    build_eval_record,
+    upload_eval_record,
+)
 
 # Initialize logging
 logging_init("./logging.json")
@@ -112,57 +116,7 @@ service = Service(
     },
 )
 
-# ============================================================================
-# REQUEST / RESPONSE MODELS
-# ============================================================================
-
-class CrewRequest(BaseModel):
-    """Request to execute a CrewAI crew."""
-
-    jschema: str = Field("urn:sd-core:schema.crewai.request.1", alias="$schema")
-    name: str = Field(description="Name of this crew execution")
-    inputs: Optional[dict] = Field(None, description="Input variables for crew")
-
-    # Crew definition (one of these required)
-    crew_ref: Optional[str] = Field(
-        None,
-        description="IVCAP aspect URN referencing crew definition",
-        alias="crew-ref",
-    )
-    crew: Optional[CrewA] = Field(None, description="Inline crew definition")
-
-    # Optional features
-    context_urns: Optional[list[str]] = Field(
-        None,
-        description="IVCAP Aspect URNs. Download the Artifact urn's using the Aspect URN's",
-        alias="context-urns",
-    )
-    enable_citations: Optional[bool] = Field(
-        False, description="Enable citation tracking (experimental)"
-    )
-
-    model_config = ConfigDict(populate_by_name=True)
-
-    additional_inputs: Optional[Union[str, list[str]]] = Field(
-        "",
-        description="[Deprecated]Previous crew outputs as markdown (string or list of strings). Use context-urns instead",
-        alias="additional-inputs",
-    )
-
-
-class CrewResponse(BaseModel):
-    """Response from crew execution."""
-
-    jschema: str = Field("urn:sd-core:schema.crewai.response.1", alias="$schema")
-    answer: str = Field(description="Final crew output")
-    crew_name: str = Field(description="Name of executed crew")
-    place_holders: list = Field(description="Placeholders used")
-    task_responses: Optional[list[TaskResponse]] = Field(description="Individual task outputs", default_factory=list)
-    created_at: str = Field(description="Execution timestamp")
-    process_time_sec: float = Field(description="CPU time")
-    run_time_sec: float = Field(description="Wall clock time")
-    token_usage: UsageMetrics = Field(description="LLM token usage")
-    citations: Optional[dict] = Field(None, description="Citation report if enabled")
+# Request / response models live in schemas.py (CrewRequest, CrewResponse).
 
 
 # ============================================================================
@@ -863,6 +817,33 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
             f"{len(response.task_responses)} tasks"
         )
         logger.info("\n\n %s", response)
+
+        # ==================== STEP 10: EVAL UPLOAD (non-blocking) ====================
+        # Publish a self-contained eval record as an IVCAP aspect for the evaluation
+        # service to score asynchronously. The whole feature is gated on the presence
+        # of the EVAL_UPLOAD_ENABLED env var. The record is built synchronously (cheap,
+        # in-memory) so it captures crew_result before the finally-block cleanup; only
+        # the network publish runs in the background.
+        if os.getenv("EVAL_UPLOAD_ENABLED", "False").lower() == "true":
+            try:
+                eval_record = build_eval_record(
+                    req=req,
+                    crew_result=crew_result,
+                    llm=llm,
+                    planning_llm=planning_llm,
+                    run_time_sec=response.run_time_sec,
+                    process_time_sec=response.process_time_sec,
+                    job_id=jobCtxt.job_id
+                )
+                asyncio.create_task(
+                    upload_eval_record(
+                        jwt_token, jobCtxt.job_id, eval_record
+                    )
+                )
+                logger.info("✓ Eval record queued for upload (non-blocking)")
+            except Exception:
+                logger.exception("Failed to queue eval record (non-fatal)")
+
         return response
 
     finally:

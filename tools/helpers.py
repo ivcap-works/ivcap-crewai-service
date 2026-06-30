@@ -140,6 +140,8 @@ class ResilientPDFSearchTool(_SourceRefAdapterMixin, PDFSearchTool):
     ) -> str:
         try:
             # query = self._rewrite_query(query)
+            if not query or not bool(query.strip()):
+                return "The given search query is empty. Provide a different valid search query. Returning."
             logger.info("[🔍 Searching PDF: %s | query: %s]", pdf, query)
             # When bound to a fixed PDF at construction the agent passes only
             # `query`; fall back to the stored pdf in that case.
@@ -178,6 +180,8 @@ class ResilientWebsiteSearchTool(_SourceRefAdapterMixin, WebsiteSearchTool):
     ) -> str:
         try:
             # search_query = self._rewrite_query(search_query)
+            if not search_query or not bool(search_query.strip()):
+                return "The given search query is empty. Provide a different valid search query. Returning."
             logger.info("[🔍 Searching website: %s | query: %s]", website, search_query)
             if website is not None:
                 self.add(website)

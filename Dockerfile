@@ -17,7 +17,7 @@ RUN poetry config virtualenvs.create false && poetry install --no-root
 
 # Get service files
 ADD service.py ivcap_tool.py service_types.py vectordb.py events.py logging.json utils.py llm_factory.py artifact_manager.py crew_builder.py ./
-ADD ivcap_langgraph_tool.py download_manager.py knowledge_processor.py ./
+ADD ivcap_langgraph_tool.py download_manager.py knowledge_processor.py schemas.py eval_uploader.py ./
 ADD tools/ ./tools/
 
 # So we can run it with --user
@@ -43,5 +43,6 @@ ENV LITELLM_GEMINI_MODEL=gemini-2.5-pro
 ENV EMBEDDING_MODEL=text-embedding-3-large
 ENV IVCAP_RUNS_BASE_DIR=/tmp
 ENV AGENT_MAX_EXECUTION_TIME=1200
+ENV EVAL_UPLOAD_ENABLED=True
 
 ENTRYPOINT ["python", "/app/service.py", "--port", "80"]
