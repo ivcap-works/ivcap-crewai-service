@@ -1,3 +1,5 @@
+from urllib.parse import quote_plus
+
 from crewai_tools import PDFSearchTool, WebsiteSearchTool, SerperDevTool
 from pydantic import model_validator
 from typing_extensions import Self
@@ -8,6 +10,27 @@ from llm_factory import get_llm_factory
 from tools.source_ref_rag_adapter import SourceRefRagAdapter
 
 logger = getLogger(__name__)
+
+# Sites whose own search endpoint returns query-relevant results directly.
+# Scraping that page instead of the bare homepage gives the RAG adapter far
+# more relevant content to index for a given query.
+_KNOWN_SITE_SEARCH_TEMPLATES = {
+    "https://www.frontiersin.org/": "https://www.frontiersin.org/search?query={query_terms}&tab=top-results",
+    "https://www.mdpi.com/": "https://www.mdpi.com/search?q={query_terms}",
+    "https://www.pnas.org/": "https://www.pnas.org/action/doSearch?field1=AllField&text1={query_terms}"
+}
+
+
+def _known_site_search_url(website: str, query: str) -> str | None:
+    """Return a known site's search-results URL for ``query``, or ``None``.
+
+    Matches ``website`` against :data:`_KNOWN_SITE_SEARCH_TEMPLATES` by prefix
+    so callers can pass either the bare domain or a deeper path on that site.
+    """
+    for prefix, template in _KNOWN_SITE_SEARCH_TEMPLATES.items():
+        if website.startswith(prefix):
+            return template.format(query_terms=quote_plus(query))
+    return None
 
 
 class _SourceRefAdapterMixin:
@@ -148,7 +171,8 @@ class ResilientPDFSearchTool(_SourceRefAdapterMixin, PDFSearchTool):
             source_ref = pdf if pdf is not None else self.pdf
             if pdf is not None:
                 self.add(pdf)
-            return self._query_with_source(query, source_ref, similarity_threshold, limit)
+                return self._query_with_source(query, source_ref, similarity_threshold, limit)
+            return "No relevant content found."
 
         except Exception as e:
             error_msg = str(e)
@@ -184,8 +208,12 @@ class ResilientWebsiteSearchTool(_SourceRefAdapterMixin, WebsiteSearchTool):
                 return "The given search query is empty. Provide a different valid search query. Returning."
             logger.info("[🔍 Searching website: %s | query: %s]", website, search_query)
             if website is not None:
-                self.add(website)
-            return self._query_with_source(search_query, website, similarity_threshold, limit)
+                search_url = _known_site_search_url(website, search_query) or website
+                if search_url != website:
+                    logger.info("[🔍 Using known site search URL: %s]", search_url)
+                self.add(search_url)
+                return self._query_with_source(search_query, search_url, similarity_threshold, limit)
+            return "No relevant content found."
 
         except Exception as e:
             error_msg = str(e)
