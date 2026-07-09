@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from ivcap_service import getLogger, JobContext
+from ivcap_client import IVCAP
 from ivcap_client.api.aspect import aspect_read
 from ivcap_client.utils import process_error
 
@@ -118,7 +119,19 @@ class DownloadManager:
         self.inputs_dir = Path(
             f"{os.getenv('IVCAP_RUNS_BASE_DIR', '/tmp')}/runs/{self.job_id}/inputs"
         )
-        self.ivcap_client = job_context.ivcap
+        # `job_context.ivcap` builds an unauthenticated client when running
+        # inside the platform (only IVCAP_BASE_URL is set, not IVCAP_URL), so
+        # aspect/artifact reads get silently rejected in prod. Build our own
+        # client authenticated with the job's JWT instead, same as ArtifactManager.
+        self.ivcap_client = IVCAP(
+            url=IVCAP_URL, token=self._extract_token(job_context.job_authorization)
+        )
+
+    @staticmethod
+    def _extract_token(authorization: Optional[str]) -> Optional[str]:
+        if isinstance(authorization, str) and authorization.startswith("Bearer "):
+            return authorization[len("Bearer "):]
+        return authorization
 
     # ------------------------------------------------------------------
     # Public API
