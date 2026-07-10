@@ -21,6 +21,8 @@ dependencies = [
     "ivcap-service (==0.6.16)",
     "python-dotenv>=1.2.1",
     "google-genai>=1.64.0",
+    "langfuse>=2.60.10",
+    "openinference-instrumentation-crewai>=1.1.10",
 ]
 
 [project.optional-dependencies]

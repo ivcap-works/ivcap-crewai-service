@@ -35,11 +35,11 @@ import shutil
 from pathlib import Path
 from typing import Optional, Union
 from dotenv import load_dotenv
-
+from langfuse import get_client
 load_dotenv()
 
 # Disable telemetry BEFORE importing CrewAI
-os.environ["OTEL_SDK_DISABLED"] = "true"
+# os.environ["OTEL_SDK_DISABLED"] = "true"
 os.environ["CREWAI_DISABLE_TELEMETRY"] = "true"
 
 # Configure LiteLLM drop_params to prevent parameter conflicts
@@ -83,15 +83,24 @@ from tools.pubmed import (
 )
 
 from download_manager import DownloadManager, DownloadResult
+from openinference.instrumentation.crewai import CrewAIInstrumentor
 
+langfuse = get_client()
+# Verify connection
+if langfuse.auth_check():
+    print("Langfuse client is authenticated and ready!")
+else:
+    print("Authentication failed. Please check your credentials and host.")
 # Initialize logging
 logging_init("./logging.json")
 logger = getLogger("app")
-
+CrewAIInstrumentor().instrument(skip_dep_check=True)
 # for local test env, please set the SERPER_API_KEY explicitly
 try:
     get_secret("SERPER_API_KEY")
     get_secret("NCBI_API_KEY")
+    get_secret("LANGFUSE_SECRET_KEY")
+    get_secret("LANGFUSE_PUBLIC_KEY")
 except Exception as e:
     logger.error(
         "failed to load SERPER_API_KEY key, will impact the SERPER search tool functionality %s",
@@ -792,11 +801,12 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         req.inputs["additional_information"] = additional_information
         logger.info("Starting crew with inputs %s", req.inputs)
         crew_result = None
-        try:
-            crew_result = crew.kickoff(req.inputs)
-        except Exception as exp:
-            logger.exception("error when executing crew")
-            raise HTTPException(status_code=503, detail="Error in Crewai execution") from exp
+        with langfuse.start_as_current_observation(as_type="span", name="crewai-index-trace"):
+            try:
+                crew_result = crew.kickoff(req.inputs)
+            except Exception as exp:
+                logger.exception("error when executing crew")
+                raise HTTPException(status_code=503, detail="Error in Crewai execution") from exp
 
         end_time = (time.process_time(), time.time())
         logger.info(f"✓ Crew execution complete")

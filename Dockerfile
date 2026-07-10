@@ -43,5 +43,6 @@ ENV LITELLM_GEMINI_MODEL=gemini-2.5-pro
 ENV EMBEDDING_MODEL=text-embedding-3-large
 ENV IVCAP_RUNS_BASE_DIR=/tmp
 ENV AGENT_MAX_EXECUTION_TIME=1200
+ENV LANGFUSE_BASE_URL=https://us.cloud.langfuse.com
 
 ENTRYPOINT ["python", "/app/service.py", "--port", "80"]
