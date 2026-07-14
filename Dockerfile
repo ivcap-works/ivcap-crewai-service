@@ -1,4 +1,4 @@
-FROM python:3.11-slim-bookworm AS builder
+FROM python:3.13-slim-bookworm AS builder
 
 # Install required systems libraries
 RUN apt-get update && \

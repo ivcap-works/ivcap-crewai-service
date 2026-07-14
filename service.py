@@ -84,13 +84,8 @@ from tools.pubmed import (
 
 from download_manager import DownloadManager, DownloadResult
 from openinference.instrumentation.crewai import CrewAIInstrumentor
+# from langfuse.callback import CallbackHandler
 
-langfuse = get_client()
-# Verify connection
-if langfuse.auth_check():
-    print("Langfuse client is authenticated and ready!")
-else:
-    print("Authentication failed. Please check your credentials and host.")
 # Initialize logging
 logging_init("./logging.json")
 logger = getLogger("app")
@@ -106,7 +101,6 @@ except Exception as e:
         "failed to load SERPER_API_KEY key, will impact the SERPER search tool functionality %s",
         e,
     )
-
 # Define IVCAP service metadata
 service = Service(
     name="IVCAP CrewAI Service",
@@ -121,6 +115,12 @@ service = Service(
     },
 )
 
+langfuse = get_client()
+# Verify connection
+if langfuse.auth_check():
+    logger.info("Langfuse client is authenticated and ready!")
+else:
+    logger.info("Authentication failed. Please check your credentials and host.")
 # ============================================================================
 # REQUEST / RESPONSE MODELS
 # ============================================================================
@@ -801,7 +801,7 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         req.inputs["additional_information"] = additional_information
         logger.info("Starting crew with inputs %s", req.inputs)
         crew_result = None
-        with langfuse.start_as_current_observation(as_type="span", name="crewai-index-trace"):
+        with langfuse.start_as_current_observation(as_type="span", name=crew_def.name):
             try:
                 crew_result = crew.kickoff(req.inputs)
             except Exception as exp:
