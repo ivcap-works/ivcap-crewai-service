@@ -74,6 +74,8 @@ REASONING_MODELS = (
     "o3-mini",
     "o3-pro",
     "o4-mini",
+    "gpt-5",
+    "gpt-5.1",
     # Anthropic extended-thinking models
     "claude-3-7-sonnet",
     "claude-opus-4",

@@ -801,7 +801,8 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         req.inputs["additional_information"] = additional_information
         logger.info("Starting crew with inputs %s", req.inputs)
         crew_result = None
-        with langfuse.start_as_current_observation(as_type="span", name=crew_def.name):
+        trace_id = langfuse.create_trace_id(seed=jobCtxt.job_id)
+        with langfuse.start_as_current_observation(as_type="span", name=crew_def.name, trace_context={"trace_id": trace_id}):
             try:
                 crew_result = crew.kickoff(req.inputs)
             except Exception as exp:
