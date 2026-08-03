@@ -23,6 +23,7 @@ from crewai.tools.base_tool import BaseTool
 from ivcap_client import IVCAP
 from ivcap_tool import ivcap_tool_test
 from ivcap_service import JobContext, getLogger
+from skills.utils import Skill, SkillManager
 from vectordb import create_vectordb_config
 
 from events import EventListener
@@ -55,6 +56,7 @@ class Context():
     llm_factory: Optional[Any] = None
     citation_manager: Optional[Any] = None
     embedder: Optional[dict] = None
+    skill_manager: Optional[Any] = None
 
     def __post_init__(self):
         """Set tmp_dir from environment variable if not provided"""
@@ -64,11 +66,61 @@ class Context():
     @property
     def job_id(self):
         return self.job_context.job_id
-    
+
     @property
     def jwt_token(self):
         return self.job_context.job_authorization
-    
+
+    def get_skill_manager(self) -> SkillManager:
+        """
+        Lazily create the job's SkillManager.
+
+        Shared by all agents of a crew so a skill named by several agents is
+        only downloaded once (the manager caches per entity URN).
+        """
+        if self.skill_manager is None:
+            self.skill_manager = SkillManager(self.job_context)
+        return self.skill_manager
+
+
+    def download_skills(self, skill_refs: Optional[List[str]]) -> List[Skill]:
+        """
+        Download skills from IVCAP into the job's skills directory.
+
+        Each reference is either a bare skill name ('scientific_review_writer_report')
+        or a full entity URN ('urn:sd:crewai:crew.skill.scientific_review_writer_report').
+        The skill aspect (schema 'urn:sd:schema:crew.skill') carries the URN of the
+        artifact holding the skill markdown, which is what gets downloaded.
+
+        Skills that cannot be resolved are logged and skipped rather than failing
+        crew construction.
+        """
+        if not skill_refs:
+            return []
+
+        skills = self.get_skill_manager().load_skills(skill_refs)
+        logger.info(
+            "Downloaded %d/%d skills: %s",
+            len(skills), len(skill_refs), [str(s.path) for s in skills],
+        )
+        return skills
+
+
+def skills_as_backstory(skills: List[Skill]) -> str:
+    """Render the local path of each downloaded skill for the agent's backstory."""
+    lines = [
+        "## Skills",
+        "You have been given the following skill documents on the local file system. "
+        "Before starting your work, read each one in full and follow its guidelines.",
+        "",
+    ]
+    for s in skills:
+        title = s.name or s.entity.rsplit(".", 1)[-1]
+        lines.append(f"- {title}: {s.description or 'no description'}")
+        lines.append(f"  path: {s.path}")
+    return "\n".join(lines)
+
+
 supported_tools = {}
 def add_supported_tools(tools: dict[str, Callable[['ToolA'], BaseTool]]):
 # def add_supported_tools(tools: dict[str, Callable[['ToolA'], Any]]):
@@ -151,13 +203,15 @@ class AgentA(BaseModel):
     llm_configs: Optional[dict]= Field(None, description="Optional additional LLM configuration parameters")
     reasoning: bool = Field(False, description="Whether the agent should use a reasoning process")
     max_reasoning_attempts: int = Field(3, description="Maximum number of reasoning attempts the agent will make before giving up")
+    skills: Optional[List[str]] = Field([], description="list of IVCAP skills for this agent, either a skill name ('scientific_review_writer_report') or a full entity urn ('urn:sd:crewai:crew.skill.scientific_review_writer_report')")
 
     def as_crew_agent(self, ctxt: Context, **kwargs) -> Agent:
         """
         Create Agent with optional custom LLM.
-        
+
         Updated: Supports per-agent custom LLM models via llm_factory
         Updated: Added tool filtering to skip artifact-dependent tools when no artifacts provided
+        Updated: Downloads the agent's IVCAP skills and points the agent at their local paths
         """
         try:
             d = self.model_dump(mode='python')
@@ -220,7 +274,11 @@ class AgentA(BaseModel):
                     d.pop('llm', None)
             else:
                 d.pop('llm', None)  # Use crew's LLM
-            
+            if self.skills:
+                ctxt.download_skills(self.skills)
+                d['skills'] = [ctxt.skill_manager.skills_dir]
+            else:
+                d.pop('skills')
             d.update(**kwargs)
             d["max_execution_time"]=AGENT_MAX_EXECUTION_TIME
             agent = Agent(**d)

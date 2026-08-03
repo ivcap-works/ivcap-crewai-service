@@ -802,9 +802,10 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         logger.info("Starting crew with inputs %s", req.inputs)
         crew_result = None
         trace_id = langfuse.create_trace_id(seed=jobCtxt.job_id)
-        with langfuse.start_as_current_observation(as_type="span", name=crew_def.name, trace_context={"trace_id": trace_id}):
+        with langfuse.start_as_current_observation(as_type="span", name=crew_def.name, trace_context={"trace_id": trace_id}) as lf_span:
             try:
                 crew_result = crew.kickoff(req.inputs)
+                # lf_span.update(environment="local")
             except Exception as exp:
                 logger.exception("error when executing crew")
                 raise HTTPException(status_code=503, detail="Error in Crewai execution") from exp
