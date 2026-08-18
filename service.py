@@ -40,7 +40,7 @@ load_dotenv()
 
 # Disable telemetry BEFORE importing CrewAI
 # os.environ["OTEL_SDK_DISABLED"] = "true"
-os.environ["CREWAI_DISABLE_TELEMETRY"] = "true"
+# os.environ["CREWAI_DISABLE_TELEMETRY"] = "true"
 
 # Configure LiteLLM drop_params to prevent parameter conflicts
 import litellm
