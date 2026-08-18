@@ -155,7 +155,7 @@ class EventListener(BaseEventListener):
             id = self._id(source)
             logger.info(f"{get_job_id()}: tool {id} started")
             if (r := get_event_reporter()):
-                event = _ToolStartedEvent(id=id, tool_name=e.tool_name, tool_args=e.tool_args, agent=e.agent_role)
+                event = _ToolStartedEvent(id=id, tool_name=e.tool_name, tool_args=str(e.tool_args), agent=e.agent_role)
                 r.emit(event)
 
         @bus.on(ToolUsageFinishedEvent)

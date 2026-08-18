@@ -302,11 +302,11 @@ class SkillManager:
         """
         Read an artifact's body as text.
 
-        `open()` is the current ivcap-client API; older releases only offered
-        `as_file()`, so fall back to it to stay compatible.
+        `open()` loads the whole blob into memory, which is fine here — skills
+        are small markdown documents. It yields bytes for platform artifacts and
+        text for local-file ones, hence the conditional decode.
         """
-        reader = getattr(artifact, "open", None) or getattr(artifact, "as_file")
-        with reader() as f:
+        with artifact.open() as f:
             raw = f.read()
         return raw.decode("utf-8") if isinstance(raw, bytes) else str(raw)
 

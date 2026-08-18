@@ -242,9 +242,9 @@ class DownloadManager:
         safe_name = self._filename_for_artifact(artifact.name, mime_type, idx)
         file_path = self.inputs_dir / safe_name
 
-        file_obj = artifact.as_file()
-        with open(file_path, "wb") as f:
-            f.write(file_obj.read())
+        # `as_local_file(path)` streams the blob straight to disk and creates
+        # parent directories as needed.
+        artifact.as_local_file(file_path)
 
         logger.info(f"  Saved artifact → {file_path} ({mime_type or 'unknown type'})")
         return file_path
