@@ -532,7 +532,6 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         # ==================== STEP 4: LOAD CREW ====================
         crew_def = load_crew_definition(req, ivcap)
         logger.info(f"Loaded crew definition: {crew_def.name}")
-        logger.info(f"Serper API key loaded: {get_secret("SERPER_API_KEY")}")
 
         # ==================== STEP 4.5: SMART ARTIFACT HANDLING ====================
         artifact_knowledge_sources = []

@@ -3,13 +3,17 @@ LLM Factory for CrewAI with LiteLLM Proxy Integration
 Handles JWT token authentication and multi-tier fallback
 
 Created: Fresh implementation for task context chaining feature
-Changes: 
+Changes:
 - Replaces previous version - adds comprehensive JWT auth with 3-tier fallback
 - Added create_embedder_config method for JWT-authenticated embeddings via LiteLLM proxy
+- Added four behaviour-bound LLM profiles (low/medium/high thinking, fast writer)
+  resolved through a profile registry
 """
 
 import os
-from typing import Optional
+from dataclasses import dataclass
+from enum import IntEnum
+from typing import Optional, Union
 from crewai import LLM
 from crewai.rag.embeddings.providers.openai import OpenAIProviderSpec
 from ivcap_service import getLogger
@@ -98,6 +102,14 @@ REASONING_UNSUPPORTED_PARAMS = (
     "logit_bias",
 )
 
+# Parameters only reasoning models understand. A profile can declare a thinking
+# depth while the deployment has pointed that profile at a non-reasoning model
+# (e.g. LITELLM_HIGH_THINKING_MODEL=gpt-4.1); the provider rejects
+# reasoning_effort there, so it is dropped.
+REASONING_ONLY_PARAMS = (
+    "reasoning_effort",
+)
+
 
 def _is_reasoning_model(model: Optional[str]) -> bool:
     """Return True for reasoning models from OpenAI, Anthropic, or Google Gemini."""
@@ -113,18 +125,180 @@ def filter_unsupported_params(model: Optional[str], params: dict) -> dict:
     Drop parameters a given model does not support before constructing the LLM.
 
     Reasoning models do not accept sampling parameters such as temperature and
-    top_p. Returns a new dict; the input is left unmodified.
+    top_p; non-reasoning models in turn do not accept reasoning_effort. Returns a
+    new dict; the input is left unmodified.
     """
-    if _is_reasoning_model(model):
-        unsupported = [p for p in REASONING_UNSUPPORTED_PARAMS if p in params]
-        if unsupported:
-            logger.info(
-                "Model '%s' is a reasoning model; dropping unsupported params: %s",
-                model,
-                ", ".join(unsupported),
-            )
-            return {k: v for k, v in params.items() if k not in REASONING_UNSUPPORTED_PARAMS}
+    drop = (
+        REASONING_UNSUPPORTED_PARAMS if _is_reasoning_model(model)
+        else REASONING_ONLY_PARAMS
+    )
+    unsupported = [p for p in drop if p in params]
+    if unsupported:
+        logger.info(
+            "Model '%s' does not support param(s) %s; dropping them",
+            model,
+            ", ".join(unsupported),
+        )
+        return {k: v for k, v in params.items() if k not in drop}
     return dict(params)
+
+
+# ============================================================================
+# LLM PROFILES
+# ============================================================================
+#
+# A profile is a named capability tier: a model plus the behaviour it is
+# configured for. The behaviour (thinking depth, creativity, output length) is
+# declared once and the request parameters are derived from it, so the two cannot
+# drift apart. Call sites name a tier instead of a model.
+
+
+class Thinking(IntEnum):
+    """Deliberation depth. Ordered: higher == more thinking, slower, dearer."""
+
+    NONE = 0     # direct generation, no deliberation
+    LOW = 1      # quick decisions, short chain of thought
+    MEDIUM = 2   # multi-step reasoning, planning, tool orchestration
+    HIGH = 3     # deep analysis, ambiguous problems, careful synthesis
+
+
+# Thinking depth -> provider reasoning_effort. NONE has no entry: no
+# reasoning_effort is sent at all for non-deliberating profiles.
+_REASONING_EFFORT = {
+    Thinking.LOW: "low",
+    Thinking.MEDIUM: "medium",
+    Thinking.HIGH: "high",
+}
+
+
+@dataclass(frozen=True)
+class LLMProfile:
+    """
+    A named capability tier: a model plus the behaviour it is configured for.
+
+    The model is resolved from `env_var` so a deployment can repoint a tier
+    without code changes; the behaviour is fixed in code because it is the
+    contract call sites rely on.
+
+    Attributes:
+        name: Profile identifier, e.g. "high_thinking_model".
+        env_var: Environment variable overriding the model for this tier.
+        default_model: Model used when `env_var` is unset.
+        thinking: Deliberation depth, bound to reasoning_effort.
+        creativity: 0.0 (deterministic) .. 1.0 (exploratory), bound to
+            temperature. Ignored by reasoning models, which reject temperature.
+        max_output_tokens: Bound to max_tokens.
+        purpose: What this tier is for; documentation for call sites.
+    """
+
+    name: str
+    env_var: str
+    default_model: str
+    thinking: Thinking
+
+    def model(self) -> str:
+        """Resolve the model: profile env var, else the coded default."""
+        return os.getenv(self.env_var) or self.default_model
+
+    def llm_params(self, **overrides) -> dict:
+        """
+        Bind this profile's behaviour to LLM parameters, caller overrides last.
+
+        Params the resolved model rejects are stripped later by
+        `filter_unsupported_params`, so behaviour can be declared freely here.
+        """
+        params= {}
+        effort = _REASONING_EFFORT.get(self.thinking)
+        if effort:
+            params["reasoning_effort"] = effort
+        params.update(overrides)
+        return params
+
+    def build(
+        self,
+        factory: "LLMFactory",
+        jwt_token: Optional[str] = None,
+        model: Optional[str] = None,
+        **overrides,
+    ) -> LLM:
+        """Create this profile's LLM via `factory`."""
+        resolved = model or self.model()
+        params = self.llm_params(**overrides)
+        logger.info(
+            "Building '%s' profile: model=%s, params=%s", self.name, resolved, params
+        )
+        return factory.create_llm(jwt_token=jwt_token, model=resolved, **params)
+
+
+# The four supported tiers. The thinking tiers share one reasoning model and are
+# separated by reasoning_effort; the writer tier uses a chat model. Override the
+# model per environment with the env var of each profile.
+#
+# Note: gpt-5 is a reasoning model, so its temperature/creativity is stripped by
+# filter_unsupported_params, and reasoning tokens count against max_tokens -
+# hence the larger output budgets on the deeper tiers.
+LOW_THINKING_MODEL = LLMProfile(
+    name="low_thinking_model",
+    env_var="LITELLM_LOW_THINKING_MODEL",
+    default_model="gpt-5",
+    thinking=Thinking.LOW
+)
+
+MEDIUM_THINKING_MODEL = LLMProfile(
+    name="medium_thinking_model",
+    env_var="LITELLM_MEDIUM_THINKING_MODEL",
+    default_model="gpt-5",
+    thinking=Thinking.MEDIUM
+)
+
+HIGH_THINKING_MODEL = LLMProfile(
+    name="high_thinking_model",
+    env_var="LITELLM_HIGH_THINKING_MODEL",
+    default_model="gpt-5",
+    thinking=Thinking.HIGH,
+)
+
+FAST_WRITER_MODEL = LLMProfile(
+    name="fast_writer_model",
+    env_var="LITELLM_FAST_WRITER_MODEL",
+    default_model=os.getenv("LITELLM_DEFAULT_MODEL", "gpt-4.1"),
+    thinking=Thinking.NONE
+)
+
+PROFILES: dict[str, LLMProfile] = {
+    p.name: p for p in (
+        LOW_THINKING_MODEL,
+        MEDIUM_THINKING_MODEL,
+        HIGH_THINKING_MODEL,
+        FAST_WRITER_MODEL,
+    )
+}
+
+# Anything accepted where a profile is expected.
+ProfileRef = Union[str, LLMProfile]
+
+
+def get_profile(profile: ProfileRef) -> LLMProfile:
+    """
+    Resolve a profile reference to a profile.
+
+    Accepts a profile instance, its name ("high_thinking_model"), or the
+    shorthand ("high_thinking").
+
+    Raises:
+        ValueError: If the name is not a known profile. Callers holding a value
+            that may be either a profile name or a plain model name (e.g. an
+            agent's `llm` field) should catch this and fall back to the model.
+    """
+    if isinstance(profile, LLMProfile):
+        return profile
+    key = str(profile).strip().lower()
+    found = PROFILES.get(key) or PROFILES.get(f"{key}_model")
+    if found is None:
+        raise ValueError(
+            f"Unknown LLM profile '{profile}'. Available: {', '.join(PROFILES)}"
+        )
+    return found
 
 
 class LLMFactory:
@@ -151,6 +325,9 @@ class LLMFactory:
         
         # Without JWT (development)
         llm = factory.create_llm(model="gpt-3.5-turbo")
+
+        # By profile - model and params come from the profile's behaviour
+        llm = factory.create_llm_for_profile("high_thinking", jwt_token="eyJ...")
     """
     litellm_proxy_url = os.getenv("LITELLM_PROXY")
     default_model = os.getenv("LITELLM_DEFAULT_MODEL", "gpt-4.1")
@@ -269,6 +446,34 @@ class LLMFactory:
             f"Current state: proxy={self.litellm_proxy_url}, "
             f"jwt={'present' if jwt_token else 'missing'}, "
             f"openai_key={'present' if openai_key else 'missing'}"
+        )
+
+    def create_llm_for_profile(
+        self,
+        profile: ProfileRef,
+        jwt_token: Optional[str] = None,
+        model: Optional[str] = None,
+        **overrides,
+    ) -> LLM:
+        """
+        Create an LLM from one of the named profiles.
+
+        Args:
+            profile: Profile instance, name ("fast_writer_model") or shorthand
+                ("fast_writer").
+            jwt_token: JWT token for LiteLLM proxy authentication.
+            model: Explicit model override, bypassing the profile's env var/default.
+            **overrides: LLM parameter overrides applied over the profile behaviour.
+
+        Returns:
+            Configured LLM instance for that tier.
+
+        Example:
+            llm = factory.create_llm_for_profile(HIGH_THINKING_MODEL, jwt_token=jwt)
+            llm = factory.create_llm_for_profile("low_thinking", jwt_token=jwt)
+        """
+        return get_profile(profile).build(
+            self, jwt_token=jwt_token, model=model, **overrides
         )
 
     def create_embedder_config(self, jwt_token: str) -> dict:

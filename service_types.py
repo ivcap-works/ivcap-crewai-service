@@ -194,7 +194,7 @@ class AgentA(BaseModel):
     role: str = Field(description="role description of this agent")
     goal: str = Field(description="goal description for this agent")
     backstory: str = Field(description="the backstroy of this agent")
-    llm: Optional[str] = Field(None, description="Optional custom model for this agent")
+    llm: Optional[str] = Field(None, description="Optional LLM for this agent: either a profile name ('low_thinking', 'medium_thinking', 'high_thinking', 'fast_writer') or an explicit model name ('gpt-4o')")
     max_iter: int = Field(15, description="max. number of iternations.")
     verbose: bool = Field(False, description="be verbose")
     memory: bool = Field(False, description="use memory")
@@ -227,7 +227,7 @@ class AgentA(BaseModel):
                 "builtin:FileReadTool",
                 "urn:sd-core:crewai.builtin.fileReadTool",
             }
-            
+            d["llm"]= kwargs.pop('llm') if 'llm' in kwargs else None
             tools = []
             for t in self.tools:
                 # Skip artifact-dependent tools when no inputs_dir available
@@ -249,31 +249,52 @@ class AgentA(BaseModel):
             
             d['tools'] = tools
             
-            # Per-agent custom LLM
+            # Per-agent custom LLM. `llm` names either a capability profile
+            # ("high_thinking", "fast_writer") or an explicit model ("gpt-4o").
+            # A profile supplies its own behaviour (reasoning effort, temperature,
+            # output budget) and llm_configs override it; an explicit model keeps
+            # the previous generic defaults.
             if self.llm and ctxt.llm_factory and ctxt.jwt_token:
-                llm_params = {
-                    "temperature": 0.7,
-                    "max_tokens": 4000,
-                }
-                if self.llm_configs:
-                    llm_params.update(self.llm_configs)
+                # An unknown name is not an error: it is a model name, which is how
+                # every crew definition predating profiles behaves.
+                from llm_factory import get_profile
 
-                logger.info("Creating custom LLM for agent %s with model %s and params %s", self.name, self.llm, llm_params)
                 try:
-                    custom_llm = ctxt.llm_factory.create_llm(
-                        jwt_token=ctxt.jwt_token,
-                        model=self.llm,
-                        **llm_params
-                    )
-                    d['llm'] = custom_llm
+                    profile = get_profile(self.llm)
+                except ValueError:
+                    profile = None
+
+                llm_params = dict(self.llm_configs or {})
+                if profile is None:
+                    llm_params = {"temperature": 0.7, "max_tokens": 4000} | llm_params
+
+                try:
+                    if profile is not None:
+                        logger.info(
+                            "Creating LLM for agent %s from profile %s (model %s) with overrides %s",
+                            self.name, profile.name, profile.model(), llm_params
+                        )
+                        jwt_token = ctxt.jwt_token.split("Bearer ")[1] if "Bearer " in ctxt.jwt_token else ctxt.jwt_token
+                        d["llm"] = ctxt.llm_factory.create_llm_for_profile(
+                            profile,
+                            jwt_token=jwt_token,
+                            **llm_params
+                        )
+                    # else:
+                        # logger.info("Creating custom LLM for agent %s with model %s and params %s", self.name, self.llm, llm_params)
+                        # custom_llm = ctxt.llm_factory.create_llm(
+                        #     jwt_token=ctxt.jwt_token,
+                        #     model=self.llm,
+                        #     **llm_params
+                        # )
                 except Exception as e:
                     logger.warning(
                         f"Failed to create custom LLM for agent {self.name}: {e}. "
                         f"Using crew default."
                     )
                     d.pop('llm', None)
-            else:
-                d.pop('llm', None)  # Use crew's LLM
+            # else:
+                # d.pop('llm', None)  # Use crew's LLM
             if self.skills:
                 ctxt.download_skills(self.skills)
                 d['skills'] = [ctxt.skill_manager.skills_dir]
