@@ -11,7 +11,7 @@ Changes:
 - Crew building now uses CrewBuilder for proper task context resolution
 - Added planning_llm with JWT authentication to support planning feature
 - Added LLM validation test calls to catch authentication issues early
-- Fixed JWT extraction to use job_authorization attribute (ivcap-ai-tool v0.7.17+)
+- Fixed JWT extraction to use job_authorization attribute (ivcap-lambda/ivcap-ai-tool v0.7.17+)
 - Added task output files: saves each task and final output to runs/{job_id}/outputs/
 - Added litellm.drop_params configuration to prevent parameter conflicts
 - Added embedder configuration for JWT-authenticated embeddings via LiteLLM proxy
@@ -64,7 +64,7 @@ from crewai_tools import (
 from fastapi.exceptions import HTTPException
 
 from ivcap_service import getLogger, Service, JobContext, get_secret
-from ivcap_ai_tool import start_tool_server, ToolOptions, ivcap_ai_tool, logging_init
+from ivcap_lambda import start_lambda_server, ToolOptions, ivcap_lambda, logging_init
 from ivcap_client import IVCAP
 from ivcap_client.exception import ResourceNotFound
 
@@ -305,7 +305,7 @@ def get_auth_token(job_ctxt: JobContext) -> Optional[str]:
     Returns:
         JWT token string without "Bearer " prefix, or None
     """
-    # Path 1: job_authorization attribute (ivcap-ai-tool v0.7.17+)
+    # Path 1: job_authorization attribute (ivcap-lambda v0.7.25+)
     if hasattr(job_ctxt, "job_authorization"):
         token = job_ctxt.job_authorization
         if token:
@@ -423,7 +423,7 @@ def create_authenticated_llm(
 # ============================================================================
 
 
-@ivcap_ai_tool("/", opts=ToolOptions(tags=["CrewAI Runner"]))
+@ivcap_lambda("/", opts=ToolOptions(tags=["CrewAI Runner"]))
 async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
     """
     Execute CrewAI crew with artifact support and authentication.
@@ -903,4 +903,4 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
 
 if __name__ == "__main__":
     # Start server (port is configured in pyproject.toml via poetry-plugin-ivcap)
-    start_tool_server(service)
+    start_lambda_server(service)

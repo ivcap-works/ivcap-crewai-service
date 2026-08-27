@@ -11,7 +11,7 @@ requires-python = ">=3.13,<3.14"
 dependencies = [
     "crewai[tools] (>=1.6.0,<2.0.0)",
     "pydantic (>=2.11.5,<3.0.0)",
-    "ivcap-ai-tool (>=0.7.17,<0.8.0)",
+    "ivcap-lambda (>=0.7.25,<0.8.0)",
     "datamodel-code-generator (>=0.35.0,<1.0.0)",
     "pyjwt (>=2.10.0,<3.0.0)",
     "chromadb (>=0.4.0)",

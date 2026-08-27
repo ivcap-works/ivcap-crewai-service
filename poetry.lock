@@ -2299,21 +2299,6 @@ colors = ["colorama"]
 plugins = ["setuptools"]
 
 [[package]]
-name = "ivcap-ai-tool"
-version = "0.7.25"
-description = "⚠️ DEPRECATED – use ivcap-lambda instead. Compatibility shim only."
-optional = false
-python-versions = "<4.0,>=3.11"
-groups = ["main"]
-files = [
-    {file = "ivcap_ai_tool-0.7.25-py3-none-any.whl", hash = "sha256:468f0bedb1a92c1fdc5b5cc95d36a8643f5c39e840e22d56859475d9113ac70d"},
-    {file = "ivcap_ai_tool-0.7.25.tar.gz", hash = "sha256:2f73254bb2a2656607f27017b3dab0157ee96b851014d4e7de4d794727df71af"},
-]
-
-[package.dependencies]
-ivcap-lambda = ">=0.7.22"
-
-[[package]]
 name = "ivcap-client"
 version = "0.47.20"
 description = "A client library for accessing an IVCAP cluster"
@@ -7031,4 +7016,4 @@ test = ["pytest"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.13,<3.14"
-content-hash = "86852ad5161cfaa55aaa9dedca456a6ee3572d1a49b3fb087e16284693a1c93e"
+content-hash = "aac1d7690539959ea7d0e6b942bd030d6f6194df2fdeb5094fd56533959aa7cf"
