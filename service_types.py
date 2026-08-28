@@ -46,12 +46,17 @@ class Context():
 
     Updated: Added job_id and optional fields for artifact/JWT support
     Updated: tmp_dir now configurable via IVCAP_RUNS_BASE_DIR environment variable (default: /tmp)
+    Updated: Added run_dir - the job's writable working directory. Distinct from
+             inputs_dir: run_dir always exists and is where the service writes
+             (skills/, outputs/), while inputs_dir is the optional, read-only
+             directory of user-supplied artifacts and is None when none were given.
     """
     vectordb_config: dict
     job_context: JobContext
     tmp_dir: str = None  # Set from IVCAP_RUNS_BASE_DIR environment variable
 
     # Optional features (backward compatible)
+    run_dir: Optional[str] = None
     inputs_dir: Optional[str] = None
     llm_factory: Optional[Any] = None
     citation_manager: Optional[Any] = None
@@ -62,6 +67,10 @@ class Context():
         """Set tmp_dir from environment variable if not provided"""
         if self.tmp_dir is None:
             self.tmp_dir = os.getenv("IVCAP_RUNS_BASE_DIR", "/tmp")
+        # Mirror service.py's job directory so a directly-constructed Context
+        # (tests, tooling) still gets a valid writable path.
+        if self.run_dir is None:
+            self.run_dir = f"{os.getcwd()}/runs/{self.job_context.job_id}"
 
     @property
     def job_id(self):
@@ -79,7 +88,7 @@ class Context():
         only downloaded once (the manager caches per entity URN).
         """
         if self.skill_manager is None:
-            self.skill_manager = SkillManager(self.job_context)
+            self.skill_manager = SkillManager(self.job_context, self.run_dir)
         return self.skill_manager
 
 
@@ -406,6 +415,7 @@ class CrewA(BaseModel):
         planning_llm: Optional[LLM] = None,
         embedder: Optional[dict] = None,
         inputs_dir: Optional[str] = None,
+        run_dir: Optional[str] = None,
         knowledge_sources: Optional[list] = None,
         **kwargs
     ) -> Crew:
@@ -420,6 +430,7 @@ class CrewA(BaseModel):
         Updated: Uses CrewBuilder for two-pass task context resolution
         Updated: Added embedder parameter for JWT-authenticated embeddings
         Updated: Added knowledge_sources parameter for previous crew outputs
+        Updated: Added run_dir - the job's writable working directory
         """
         # Import here to avoid circular dependency
         from llm_factory import get_llm_factory
@@ -431,6 +442,7 @@ class CrewA(BaseModel):
         ctxt = Context(
             vectordb_config=create_vectordb_config(job_id, jwt_token),
             inputs_dir=inputs_dir,
+            run_dir=run_dir,
             llm_factory=get_llm_factory() if jwt_token else None,
             embedder=embedder,
             job_context=job_context,

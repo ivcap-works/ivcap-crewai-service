@@ -84,7 +84,6 @@ from tools.pubmed import (
 
 from download_manager import DownloadManager, DownloadResult
 from openinference.instrumentation.crewai import CrewAIInstrumentor
-# from langfuse.callback import CallbackHandler
 
 # Initialize logging
 logging_init("./logging.json")
@@ -220,8 +219,8 @@ add_supported_tools(
             jwt_token=ctxt.jwt_token,
             litellm_proxy_url=os.getenv("LITELLM_PROXY"),
             model="gemini-2.5-pro",
-            job_folder=f"{ctxt.tmp_dir}/runs/{ctxt.job_id}",
-            metadata_file=f"{ctxt.tmp_dir}/runs/{ctxt.job_id}/url_metadata.json",
+            job_folder=ctxt.run_dir,
+            metadata_file=f"{ctxt.run_dir}/url_metadata.json",
         ),
         # IVCAP LangGraph Deep Research Tool - comprehensive web research agent
         "urn:ivcap:service:dcdc770b-d276-5df5-b5b7-babf17fa6eb7": create_langgraph_tool,
@@ -445,22 +444,23 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         Crew execution response with results
     """
     # Initialize managers
-    download_mgr = DownloadManager(job_context=jobCtxt)
-    citation_mgr = None
+    
+    download_mgr = None
     download_result: Optional[DownloadResult] = None
     inputs_dir = None
     crew = None
+    runs_root = Path(os.getcwd(), "runs")
+    runs_base_dir = f"{runs_root}/{jobCtxt.job_id}"
     try:
         # ==================== STEP 1: AUTHENTICATION ====================
         jwt_token = get_auth_token(jobCtxt)
         # Get base directory from environment (default: /tmp)
-        runs_base_dir = os.getenv("IVCAP_RUNS_BASE_DIR", "/tmp")
-
+        # runs_base_dir = os.getenv("IVCAP_RUNS_BASE_DIR", f"{os.getcwd()}/runs")
         if jwt_token:
             logger.info(
                 f"✓ JWT token detected for LLM authentication (length: {len(jwt_token)})"
             )
-            os.environ["CREWAI_STORAGE_DIR"] = f"{runs_base_dir}/runs/{jobCtxt.job_id}"
+            os.environ["CREWAI_STORAGE_DIR"] = runs_base_dir
             logger.info(
                 f"✓ Set CREWAI_STORAGE_DIR for complete job isolation: {os.environ['CREWAI_STORAGE_DIR']}"
             )
@@ -468,7 +468,7 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
             logger.warning(
                 "✗ No JWT token found - LLM calls will fall back to direct OpenAI API"
             )
-            os.environ["CREWAI_STORAGE_DIR"] = f"{runs_base_dir}/runs/{jobCtxt.job_id}"
+            os.environ["CREWAI_STORAGE_DIR"] = runs_base_dir
             logger.info(
                 f"✓ Set CREWAI_STORAGE_DIR for job isolation (no JWT): {os.environ['CREWAI_STORAGE_DIR']}"
             )
@@ -477,7 +477,7 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         ivcap = jobCtxt.ivcap
         if req.context_urns:
             logger.info(f"Downloading {len(req.context_urns)} artifacts...")
-
+            download_mgr = DownloadManager(job_context=jobCtxt, input_dir_parent=runs_base_dir)
             download_result = download_mgr.download(req.context_urns)
 
             if download_result:
@@ -676,7 +676,9 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
 
                 try:
                     artifact_knowledge_sources = (
-                        create_knowledge_sources_from_artifacts(inputs_dir)
+                        create_knowledge_sources_from_artifacts(
+                            inputs_dir, jobCtxt.job_id
+                        )
                     )
                     logger.info(
                         f"✓ Created {len(artifact_knowledge_sources)} artifact knowledge sources"
@@ -746,6 +748,7 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
             planning_llm=planning_llm,
             embedder=embedder_config,
             inputs_dir=inputs_dir,
+            run_dir=runs_base_dir,
             knowledge_sources=knowledge_sources,
             memory=False,
             verbose=False,
@@ -774,7 +777,7 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         start_time = (time.process_time(), time.time())
 
         # Create outputs directory
-        outputs_dir = Path(f"{runs_base_dir}/runs/{jobCtxt.job_id}/outputs")
+        outputs_dir = Path(f"{runs_base_dir}/outputs")
         outputs_dir.mkdir(parents=True, exist_ok=True)
         logger.info("Created outputs directory: %s", outputs_dir)
         req.inputs["job_id"] = jobCtxt.job_id
@@ -880,14 +883,23 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
     finally:
         # ==================== CLEANUP ====================
         # Always cleanup artifacts and temporary files, even on failure
-        if inputs_dir:
+        if inputs_dir and download_mgr:
             download_mgr.cleanup()
         if crew and knowledge_sources:
             crew.reset_memories('knowledge')
-        # Clean up researcher links file (used for reference validation)
-        runs_base_dir = os.getenv("IVCAP_RUNS_BASE_DIR", "/tmp")
-        job_dir = Path(f"{runs_base_dir}/runs/{jobCtxt.job_id}/")
-        if os.path.exists(job_dir):
+        # Remove this job's directory (artifacts, skills, outputs, tool scratch files).
+        # Only ever delete a directory strictly *below* runs/ - never runs/ itself, and
+        # never anything outside it. runs_base_dir is interpolated from job_id, so a
+        # malformed or traversing job_id would otherwise turn this into an rmtree of
+        # the shared runs/ root, destroying concurrent jobs.
+        job_dir = Path(runs_base_dir).resolve()
+        if runs_root.resolve() not in job_dir.parents:
+            logger.error(
+                "Refusing to delete %s - not a job directory under %s",
+                job_dir,
+                runs_root,
+            )
+        elif job_dir.exists():
             try:
                 shutil.rmtree(job_dir)
                 logger.info("Contents of directory %s removed successfully.", job_dir)

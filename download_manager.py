@@ -10,8 +10,9 @@ For each URN (an aspect URN) the priority is:
   3. Otherwise (fallback)
      → save the aspect content dict as JSON to disk.
 
-Saved files are placed in the same job-isolated directory structure used by ArtifactManager:
-    {IVCAP_RUNS_BASE_DIR}/runs/{job_id}/inputs/
+Saved files are placed in the job's own directory, alongside the other
+job-isolated directories (outputs/, skills/):
+    {cwd}/runs/{job_id}/inputs/
 """
 
 import json
@@ -104,20 +105,21 @@ class DownloadManager:
       2. 'artifactUrn' found in content   → download the artifact binary.
       3. Fallback                         → save aspect content as JSON.
 
-    Directory structure (same as ArtifactManager):
-        {IVCAP_RUNS_BASE_DIR}/runs/{job_id}/inputs/
+    Directory structure - `inputs/` under the job directory passed in as
+    `input_dir_parent`, which service.py sets to {cwd}/runs/{job_id}:
+        {input_dir_parent}/inputs/
 
     Usage:
-        mgr = DownloadManager(job_context=jobCtxt)
+        mgr = DownloadManager(job_context=jobCtxt, input_dir_parent=runs_base_dir)
         inputs_dir = mgr.download(["urn:ivcap:aspect:..."])
         # ... use files in inputs_dir ...
         mgr.cleanup()
     """
 
-    def __init__(self, job_context: JobContext):
+    def __init__(self, job_context: JobContext, input_dir_parent):
         self.job_id = job_context.job_id
         self.inputs_dir = Path(
-            f"{os.getenv('IVCAP_RUNS_BASE_DIR', '/tmp')}/runs/{self.job_id}/inputs"
+            f"{input_dir_parent}/inputs"
         )
         # `job_context.ivcap` builds an unauthenticated client when running
         # inside the platform (only IVCAP_BASE_URL is set, not IVCAP_URL), so

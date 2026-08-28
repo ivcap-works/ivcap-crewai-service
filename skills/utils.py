@@ -26,7 +26,7 @@ directory per skill holding a `SKILL.md`, so they can be handed straight to
 `Agent(skills=[...])` - CrewAI renders them into the agent's system prompt.
 
 Usage:
-    mgr = SkillManager(job_context=jobCtxt)
+    mgr = SkillManager(job_context=jobCtxt, parent_dir=runs_base_dir)
     skill = mgr.load_skill("urn:sd:crewai:crew.skill.scientific_review_writer_report")
     print(skill.body)         # markdown without front matter
     agent = Agent(..., skills=[skill.crew_skill])
@@ -154,17 +154,17 @@ class SkillManager:
     """
     Downloads skills from IVCAP for a specific job.
 
-    Directory structure (alongside the other job-isolated dirs):
-        {IVCAP_RUNS_BASE_DIR}/runs/{job_id}/skills/
-            scientific_review_writer_report/SKILL.md
-            {other_skill}/SKILL.md
+    Directory structure - `skills/` under the job directory passed in as
+    `parent_dir`, which service.py sets to {cwd}/runs/{job_id}, alongside the
+    other job-isolated dirs (inputs/, outputs/):
+        {parent_dir}/skills/
+            scientific-review-writer-report/SKILL.md
+            {other-skill}/SKILL.md
     """
 
-    def __init__(self, job_context: JobContext):
+    def __init__(self, job_context: JobContext, parent_dir: str):
         self.job_id = job_context.job_id
-        self.skills_dir = Path(
-            f"{os.getenv('IVCAP_RUNS_BASE_DIR', '/tmp')}/runs/{self.job_id}/skills"
-        )
+        self.skills_dir = Path(f"{parent_dir}/skills")
         # `job_context.ivcap` builds an unauthenticated client when running inside
         # the platform, so build our own with the job's JWT (same as DownloadManager).
         self.ivcap_client = IVCAP(
@@ -175,7 +175,7 @@ class SkillManager:
     @staticmethod
     def _extract_token(authorization: Optional[str]) -> Optional[str]:
         if isinstance(authorization, str) and authorization.startswith("Bearer "):
-            return authorization[len("Bearer "):]
+            return authorization[len("Bearer ") :]
         return authorization
 
     # ------------------------------------------------------------------
@@ -237,7 +237,9 @@ class SkillManager:
         self._cache[entity] = skill
         return skill
 
-    def load_skills(self, names_or_urns: List[str], *, save: bool = True) -> List[Skill]:
+    def load_skills(
+        self, names_or_urns: List[str], *, save: bool = True
+    ) -> List[Skill]:
         """
         Load several skills, skipping (with a warning) any that fail to resolve.
         """
@@ -272,7 +274,9 @@ class SkillManager:
         """
         Find the most recent skill aspect for `entity` and return (aspect_urn, content).
         """
-        logger.info(f"Looking up skill aspect for entity '{entity}' (schema {SKILL_SCHEMA})")
+        logger.info(
+            f"Looking up skill aspect for entity '{entity}' (schema {SKILL_SCHEMA})"
+        )
         aspects = list(
             self.ivcap_client.list_aspects(
                 entity=entity,
@@ -350,7 +354,11 @@ class SkillManager:
 
         # CrewAI types metadata as a string→string mapping.
         metadata = front_matter.get("metadata")
-        metadata = {k: str(v) for k, v in metadata.items()} if isinstance(metadata, dict) else {}
+        metadata = (
+            {k: str(v) for k, v in metadata.items()}
+            if isinstance(metadata, dict)
+            else {}
+        )
         if skill.version:
             metadata.setdefault("version", str(skill.version))
         if metadata:
@@ -375,10 +383,7 @@ class SkillManager:
         try:
             return activate_skill(load_skill_metadata(skill.path.parent))
         except Exception as e:
-            logger.warning(f"CrewAI could not load skill '{skill.entity}' from {skill.path}: {e}")
+            logger.warning(
+                f"CrewAI could not load skill '{skill.entity}' from {skill.path}: {e}"
+            )
             return None
-
-
-def load_skill(job_context: JobContext, name_or_urn: str, *, save: bool = True) -> Skill:
-    """Convenience wrapper for loading a single skill without holding a manager."""
-    return SkillManager(job_context).load_skill(name_or_urn, save=save)

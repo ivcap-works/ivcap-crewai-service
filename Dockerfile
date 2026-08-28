@@ -26,6 +26,10 @@ RUN mkdir /data && chmod 777 /data
 RUN mkdir /.embedchain && chmod 777 /.embedchain
 RUN mkdir /.local && chmod 777 /.local
 RUN mkdir /.mem0 && chmod 777 /.mem0
+# Job working directories live under <cwd>/runs, and cwd is WORKDIR (/app), which
+# is root-owned - so this must be writable for the --user uid too. The service
+# creates runs/{job_id}/{inputs,outputs,skills} and the ChromaDB store in here.
+RUN mkdir -p /app/runs && chmod 777 /app/runs
 
 # VERSION INFORMATION
 ARG VERSION 2.1.2
@@ -42,8 +46,7 @@ ENV LITELLM_DEFAULT_MODEL=gpt-4.1
 ENV LITELLM_FALLBACK_MODEL=gpt-4o
 ENV LITELLM_GEMINI_MODEL=gemini-2.5-pro
 ENV EMBEDDING_MODEL=text-embedding-3-large
-ENV IVCAP_RUNS_BASE_DIR=/tmp
-ENV CREWAI_TOOLS_ALLOW_UNSAFE_PATHS=True
+
 ENV AGENT_MAX_EXECUTION_TIME=1200
 ENV LANGFUSE_BASE_URL=https://us.cloud.langfuse.com
 ENV LANGFUSE_TRACING_ENVIRONMENT=dev
