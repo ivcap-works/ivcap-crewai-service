@@ -39,8 +39,9 @@ from langfuse import get_client
 load_dotenv()
 
 # Disable telemetry BEFORE importing CrewAI
-# os.environ["OTEL_SDK_DISABLED"] = "true"
-# os.environ["CREWAI_DISABLE_TELEMETRY"] = "true"
+TRACING_ENABLED = os.environ.get("SERVICE_TRACING_ENABLED", "False") == "True"
+os.environ["OTEL_SDK_DISABLED"] = str(not TRACING_ENABLED)
+os.environ["CREWAI_DISABLE_TELEMETRY"] = str(not TRACING_ENABLED)
 
 # Configure LiteLLM drop_params to prevent parameter conflicts
 import litellm
@@ -88,13 +89,14 @@ from openinference.instrumentation.crewai import CrewAIInstrumentor
 # Initialize logging
 logging_init("./logging.json")
 logger = getLogger("app")
-CrewAIInstrumentor().instrument(skip_dep_check=True)
+
 # for local test env, please set the SERPER_API_KEY explicitly
 try:
     get_secret("SERPER_API_KEY")
     get_secret("NCBI_API_KEY")
-    get_secret("LANGFUSE_SECRET_KEY")
-    get_secret("LANGFUSE_PUBLIC_KEY")
+    if TRACING_ENABLED:
+        get_secret("LANGFUSE_SECRET_KEY")
+        get_secret("LANGFUSE_PUBLIC_KEY")
 except Exception as e:
     logger.error(
         "failed to load SERPER_API_KEY key, will impact the SERPER search tool functionality %s",
@@ -114,12 +116,15 @@ service = Service(
     },
 )
 
-langfuse = get_client()
-# Verify connection
-if langfuse.auth_check():
-    logger.info("Langfuse client is authenticated and ready!")
-else:
-    logger.info("Authentication failed. Please check your credentials and host.")
+if TRACING_ENABLED:
+    CrewAIInstrumentor().instrument(skip_dep_check=True)
+    langfuse = get_client()
+    # Verify connection
+    if langfuse.auth_check():
+        logger.info("Langfuse client is authenticated and ready!")
+    else:
+        logger.info("Authentication failed. Please check your credentials and host.")
+
 # ============================================================================
 # REQUEST / RESPONSE MODELS
 # ============================================================================
@@ -804,14 +809,16 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         req.inputs["additional_information"] = additional_information
         logger.info("Starting crew with inputs %s", req.inputs)
         crew_result = None
-        trace_id = langfuse.create_trace_id(seed=jobCtxt.job_id)
-        with langfuse.start_as_current_observation(as_type="span", name=crew_def.name, trace_context={"trace_id": trace_id}) as lf_span:
-            try:
+        try:
+            if TRACING_ENABLED:
+                trace_id = langfuse.create_trace_id(seed=jobCtxt.job_id)
+                with langfuse.start_as_current_observation(as_type="span", name=crew_def.name, trace_context={"trace_id": trace_id}):
+                    crew_result = crew.kickoff(req.inputs)
+            else:
                 crew_result = crew.kickoff(req.inputs)
-                # lf_span.update(environment="local")
-            except Exception as exp:
-                logger.exception("error when executing crew")
-                raise HTTPException(status_code=503, detail="Error in Crewai execution") from exp
+        except Exception as exp:
+            logger.exception("error when executing crew")
+            raise HTTPException(status_code=503, detail="Error in Crewai execution") from exp
 
         end_time = (time.process_time(), time.time())
         logger.info(f"✓ Crew execution complete")
