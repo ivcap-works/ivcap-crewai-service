@@ -465,18 +465,18 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
             logger.info(
                 f"✓ JWT token detected for LLM authentication (length: {len(jwt_token)})"
             )
-            os.environ["CREWAI_STORAGE_DIR"] = runs_base_dir
-            logger.info(
-                f"✓ Set CREWAI_STORAGE_DIR for complete job isolation: {os.environ['CREWAI_STORAGE_DIR']}"
-            )
+            # os.environ["CREWAI_STORAGE_DIR"] = runs_base_dir
+            # logger.info(
+            #     f"✓ Set CREWAI_STORAGE_DIR for complete job isolation: {os.environ['CREWAI_STORAGE_DIR']}"
+            # )
         else:
             logger.warning(
                 "✗ No JWT token found - LLM calls will fall back to direct OpenAI API"
             )
-            os.environ["CREWAI_STORAGE_DIR"] = runs_base_dir
-            logger.info(
-                f"✓ Set CREWAI_STORAGE_DIR for job isolation (no JWT): {os.environ['CREWAI_STORAGE_DIR']}"
-            )
+            # os.environ["CREWAI_STORAGE_DIR"] = runs_base_dir
+            # logger.info(
+            #     f"✓ Set CREWAI_STORAGE_DIR for job isolation (no JWT): {os.environ['CREWAI_STORAGE_DIR']}"
+            # )
 
         # ==================== STEP 2: ARTIFACTS ====================
         ivcap = jobCtxt.ivcap
