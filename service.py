@@ -35,7 +35,7 @@ import shutil
 from pathlib import Path
 from typing import Optional, Union
 from dotenv import load_dotenv
-from langfuse import get_client
+from langfuse import get_client, propagate_attributes
 load_dotenv()
 
 # Disable telemetry BEFORE importing CrewAI
@@ -118,9 +118,9 @@ service = Service(
 
 if TRACING_ENABLED:
     CrewAIInstrumentor().instrument(skip_dep_check=True)
-    langfuse = get_client()
+    langfuse_client = get_client()
     # Verify connection
-    if langfuse.auth_check():
+    if langfuse_client.auth_check():
         logger.info("Langfuse client is authenticated and ready!")
     else:
         logger.info("Authentication failed. Please check your credentials and host.")
@@ -420,7 +420,6 @@ def create_authenticated_llm(
         logger.info("✓ Created embedder configuration for litellm proxy")
 
     return llm, planning_llm, embedder_config, factory.litellm_proxy_url
-
 
 # ============================================================================
 # MAIN ENDPOINT
@@ -811,9 +810,20 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         crew_result = None
         try:
             if TRACING_ENABLED:
-                trace_id = langfuse.create_trace_id(seed=jobCtxt.job_id)
-                with langfuse.start_as_current_observation(as_type="span", name=crew_def.name, trace_context={"trace_id": trace_id}):
-                    crew_result = crew.kickoff(req.inputs)
+                trace_id = langfuse_client.create_trace_id(seed=jobCtxt.job_id)
+                # Propagate correlating attributes to the root span and every child
+                # observation, so session cost includes the cost-bearing generations.
+                with propagate_attributes(
+                    session_id=jobCtxt.job_id,
+                    trace_name=crew_def.name,
+                    environment=os.getenv("LANGFUSE_TRACING_ENVIRONMENT", "local"),
+                ):
+                    with langfuse_client.start_as_current_observation(as_type="span", name=crew_def.name, trace_context={"trace_id": trace_id}) as root_span:
+                        crew_result = crew.kickoff(req.inputs)
+                        root_span.update(
+                            input={"query": req.inputs},
+                            output={"response": crew_result.raw},
+                        )
             else:
                 crew_result = crew.kickoff(req.inputs)
         except Exception as exp:
