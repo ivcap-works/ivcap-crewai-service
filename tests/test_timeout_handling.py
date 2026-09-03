@@ -94,10 +94,17 @@ def _make_mock_crew_def(mock_crew):
     return mock_def
 
 
-def _run_crew_runner_expecting_http_exception(req, job_ctx, kickoff_exc, tmp_path):
+def _run_crew_runner_expecting_http_exception(
+    req, job_ctx, kickoff_exc, tmp_path, monkeypatch
+):
     """
     Patch all heavy dependencies so only the kickoff() exception path executes.
     Returns the HTTPException raised by crew_runner.
+
+    crew_runner derives its job directory from os.getcwd(), so chdir into tmp_path
+    to keep the run (and the rmtree in its finally block) out of the project tree.
+    patch.dict restores os.environ afterwards, discarding the CREWAI_STORAGE_DIR
+    that crew_runner sets.
     """
     from fastapi.exceptions import HTTPException
     from service import crew_runner
@@ -107,6 +114,8 @@ def _run_crew_runner_expecting_http_exception(req, job_ctx, kickoff_exc, tmp_pat
     mock_crew = _make_mock_crew(kickoff_exc)
     mock_def = _make_mock_crew_def(mock_crew)
 
+    monkeypatch.chdir(tmp_path)
+
     with (
         patch("service.get_auth_token", return_value=None),
         patch("service.load_crew_definition", return_value=mock_def),
@@ -115,7 +124,7 @@ def _run_crew_runner_expecting_http_exception(req, job_ctx, kickoff_exc, tmp_pat
             return_value=(mock_llm, mock_llm, None, None),
         ),
         patch("service.DownloadManager") as MockDM,
-        patch.dict(os.environ, {"IVCAP_RUNS_BASE_DIR": str(tmp_path)}),
+        patch.dict(os.environ, {}),
     ):
         MockDM.return_value.download.return_value = None
         MockDM.return_value.cleanup.return_value = None
@@ -132,7 +141,7 @@ def _run_crew_runner_expecting_http_exception(req, job_ctx, kickoff_exc, tmp_pat
 
 
 def test_timeout_error_from_kickoff_raises_http_503(
-    mock_job_context, minimal_crew_request, tmp_path
+    mock_job_context, minimal_crew_request, tmp_path, monkeypatch
 ):
     """
     TimeoutError raised by crew.kickoff() → HTTPException(503).
@@ -145,6 +154,7 @@ def test_timeout_error_from_kickoff_raises_http_503(
         mock_job_context,
         TimeoutError("Agent exceeded max_execution_time of 300s"),
         tmp_path,
+        monkeypatch,
     )
 
     assert exc.status_code == 503
@@ -152,7 +162,7 @@ def test_timeout_error_from_kickoff_raises_http_503(
 
 
 def test_asyncio_timeout_from_kickoff_raises_http_503(
-    mock_job_context, minimal_crew_request, tmp_path
+    mock_job_context, minimal_crew_request, tmp_path, monkeypatch
 ):
     """
     asyncio.TimeoutError raised by crew.kickoff() → HTTPException(503).
@@ -165,6 +175,7 @@ def test_asyncio_timeout_from_kickoff_raises_http_503(
         mock_job_context,
         asyncio.TimeoutError("Crew wall-clock limit exceeded"),
         tmp_path,
+        monkeypatch,
     )
 
     assert exc.status_code == 503
@@ -172,7 +183,7 @@ def test_asyncio_timeout_from_kickoff_raises_http_503(
 
 
 def test_generic_exception_from_kickoff_raises_http_503(
-    mock_job_context, minimal_crew_request, tmp_path
+    mock_job_context, minimal_crew_request, tmp_path, monkeypatch
 ):
     """
     Any exception from crew.kickoff() → HTTPException(503).
@@ -185,6 +196,7 @@ def test_generic_exception_from_kickoff_raises_http_503(
         mock_job_context,
         RuntimeError("Unexpected failure inside crew"),
         tmp_path,
+        monkeypatch,
     )
 
     assert exc.status_code == 503
@@ -251,3 +263,102 @@ def test_as_crew_agent_passes_max_execution_time_to_crewai():
             f"Expected Agent(max_execution_time={AGENT_MAX_EXECUTION_TIME}), "
             f"got {kwargs.get('max_execution_time')}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Tests: cleanup deletes this job's directory and nothing above it
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def crew_ref_request():
+    """
+    Request that names its crew by reference rather than inline.
+
+    load_crew_definition is mocked in these tests, so the URN is never resolved.
+    Using crew-ref avoids constructing a CrewA: service.py binds CrewA at import
+    time, and test_env_var_overrides_agent_timeout reloads service_types, so a
+    freshly-imported CrewA no longer satisfies CrewRequest's isinstance check.
+    """
+    from service import CrewRequest
+
+    return CrewRequest(
+        name="cleanup-test",
+        inputs={},
+        crew_ref="urn:ivcap:aspect:test-crew",
+    )
+
+
+def _seed_concurrent_job(tmp_path):
+    """Create runs/some-other-job/keep.md, standing in for a concurrent job."""
+    other_job = tmp_path / "runs" / "some-other-job"
+    other_job.mkdir(parents=True)
+    (other_job / "keep.md").write_text("concurrent job output")
+    return other_job
+
+
+def test_cleanup_removes_only_this_jobs_directory(
+    mock_job_context, crew_ref_request, tmp_path, monkeypatch
+):
+    """
+    The finally block removes the job's own directory while leaving runs/ and any
+    concurrent job's directory untouched.
+    """
+    other_job = _seed_concurrent_job(tmp_path)
+
+    _run_crew_runner_expecting_http_exception(
+        crew_ref_request,
+        mock_job_context,
+        RuntimeError("boom"),
+        tmp_path,
+        monkeypatch,
+    )
+
+    assert not (tmp_path / "runs" / "test-job-timeout-001").exists()
+    assert (tmp_path / "runs").exists()
+    assert (other_job / "keep.md").read_text() == "concurrent job output"
+
+
+def test_cleanup_refuses_to_delete_the_runs_root(
+    mock_job_context, crew_ref_request, tmp_path, monkeypatch
+):
+    """
+    A job_id that collapses the job directory onto the runs/ root must NOT trigger
+    an rmtree of runs/ - that would destroy every concurrent job on the host.
+    """
+    mock_job_context.job_id = ""
+    other_job = _seed_concurrent_job(tmp_path)
+
+    _run_crew_runner_expecting_http_exception(
+        crew_ref_request,
+        mock_job_context,
+        RuntimeError("boom"),
+        tmp_path,
+        monkeypatch,
+    )
+
+    assert (tmp_path / "runs").exists(), "runs/ root was deleted"
+    assert (other_job / "keep.md").read_text() == "concurrent job output"
+
+
+def test_cleanup_refuses_to_escape_the_runs_root(
+    mock_job_context, crew_ref_request, tmp_path, monkeypatch
+):
+    """
+    A traversing job_id must not let cleanup delete anything outside runs/.
+    """
+    mock_job_context.job_id = "../sibling"
+    sibling = tmp_path / "sibling"
+    sibling.mkdir()
+    (sibling / "keep.md").write_text("not ours to delete")
+    (tmp_path / "runs").mkdir()
+
+    _run_crew_runner_expecting_http_exception(
+        crew_ref_request,
+        mock_job_context,
+        RuntimeError("boom"),
+        tmp_path,
+        monkeypatch,
+    )
+
+    assert (sibling / "keep.md").read_text() == "not ours to delete"

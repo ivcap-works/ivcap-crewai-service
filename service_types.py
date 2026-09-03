@@ -23,6 +23,7 @@ from crewai.tools.base_tool import BaseTool
 from ivcap_client import IVCAP
 from ivcap_tool import ivcap_tool_test
 from ivcap_service import JobContext, getLogger
+from skills.utils import Skill, SkillManager
 from vectordb import create_vectordb_config
 
 from events import EventListener
@@ -45,30 +46,90 @@ class Context():
 
     Updated: Added job_id and optional fields for artifact/JWT support
     Updated: tmp_dir now configurable via IVCAP_RUNS_BASE_DIR environment variable (default: /tmp)
+    Updated: Added run_dir - the job's writable working directory. Distinct from
+             inputs_dir: run_dir always exists and is where the service writes
+             (skills/, outputs/), while inputs_dir is the optional, read-only
+             directory of user-supplied artifacts and is None when none were given.
     """
     vectordb_config: dict
     job_context: JobContext
     tmp_dir: str = None  # Set from IVCAP_RUNS_BASE_DIR environment variable
 
     # Optional features (backward compatible)
+    run_dir: Optional[str] = None
     inputs_dir: Optional[str] = None
     llm_factory: Optional[Any] = None
     citation_manager: Optional[Any] = None
     embedder: Optional[dict] = None
+    skill_manager: Optional[Any] = None
 
     def __post_init__(self):
         """Set tmp_dir from environment variable if not provided"""
         if self.tmp_dir is None:
             self.tmp_dir = os.getenv("IVCAP_RUNS_BASE_DIR", "/tmp")
+        # Mirror service.py's job directory so a directly-constructed Context
+        # (tests, tooling) still gets a valid writable path.
+        if self.run_dir is None:
+            self.run_dir = f"{os.getcwd()}/runs/{self.job_context.job_id}"
 
     @property
     def job_id(self):
         return self.job_context.job_id
-    
+
     @property
     def jwt_token(self):
         return self.job_context.job_authorization
-    
+
+    def get_skill_manager(self) -> SkillManager:
+        """
+        Lazily create the job's SkillManager.
+
+        Shared by all agents of a crew so a skill named by several agents is
+        only downloaded once (the manager caches per entity URN).
+        """
+        if self.skill_manager is None:
+            self.skill_manager = SkillManager(self.job_context, self.run_dir)
+        return self.skill_manager
+
+
+    def download_skills(self, skill_refs: Optional[List[str]]) -> List[Skill]:
+        """
+        Download skills from IVCAP into the job's skills directory.
+
+        Each reference is either a bare skill name ('scientific_review_writer_report')
+        or a full entity URN ('urn:sd:crewai:crew.skill.scientific_review_writer_report').
+        The skill aspect (schema 'urn:sd:schema:crew.skill') carries the URN of the
+        artifact holding the skill markdown, which is what gets downloaded.
+
+        Skills that cannot be resolved are logged and skipped rather than failing
+        crew construction.
+        """
+        if not skill_refs:
+            return []
+
+        skills = self.get_skill_manager().load_skills(skill_refs)
+        logger.info(
+            "Downloaded %d/%d skills: %s",
+            len(skills), len(skill_refs), [str(s.path) for s in skills],
+        )
+        return skills
+
+
+def skills_as_backstory(skills: List[Skill]) -> str:
+    """Render the local path of each downloaded skill for the agent's backstory."""
+    lines = [
+        "## Skills",
+        "You have been given the following skill documents on the local file system. "
+        "Before starting your work, read each one in full and follow its guidelines.",
+        "",
+    ]
+    for s in skills:
+        title = s.name or s.entity.rsplit(".", 1)[-1]
+        lines.append(f"- {title}: {s.description or 'no description'}")
+        lines.append(f"  path: {s.path}")
+    return "\n".join(lines)
+
+
 supported_tools = {}
 def add_supported_tools(tools: dict[str, Callable[['ToolA'], BaseTool]]):
 # def add_supported_tools(tools: dict[str, Callable[['ToolA'], Any]]):
@@ -142,7 +203,7 @@ class AgentA(BaseModel):
     role: str = Field(description="role description of this agent")
     goal: str = Field(description="goal description for this agent")
     backstory: str = Field(description="the backstroy of this agent")
-    llm: Optional[str] = Field(None, description="Optional custom model for this agent")
+    llm: Optional[str] = Field(None, description="Optional LLM for this agent: either a profile name ('low_thinking', 'medium_thinking', 'high_thinking', 'fast_writer') or an explicit model name ('gpt-4o')")
     max_iter: int = Field(15, description="max. number of iternations.")
     verbose: bool = Field(False, description="be verbose")
     memory: bool = Field(False, description="use memory")
@@ -151,13 +212,15 @@ class AgentA(BaseModel):
     llm_configs: Optional[dict]= Field(None, description="Optional additional LLM configuration parameters")
     reasoning: bool = Field(False, description="Whether the agent should use a reasoning process")
     max_reasoning_attempts: int = Field(3, description="Maximum number of reasoning attempts the agent will make before giving up")
+    skills: Optional[List[str]] = Field([], description="list of IVCAP skills for this agent, either a skill name ('scientific_review_writer_report') or a full entity urn ('urn:sd:crewai:crew.skill.scientific_review_writer_report')")
 
     def as_crew_agent(self, ctxt: Context, **kwargs) -> Agent:
         """
         Create Agent with optional custom LLM.
-        
+
         Updated: Supports per-agent custom LLM models via llm_factory
         Updated: Added tool filtering to skip artifact-dependent tools when no artifacts provided
+        Updated: Downloads the agent's IVCAP skills and points the agent at their local paths
         """
         try:
             d = self.model_dump(mode='python')
@@ -173,7 +236,7 @@ class AgentA(BaseModel):
                 "builtin:FileReadTool",
                 "urn:sd-core:crewai.builtin.fileReadTool",
             }
-            
+            d["llm"]= kwargs.pop('llm') if 'llm' in kwargs else None
             tools = []
             for t in self.tools:
                 # Skip artifact-dependent tools when no inputs_dir available
@@ -195,32 +258,57 @@ class AgentA(BaseModel):
             
             d['tools'] = tools
             
-            # Per-agent custom LLM
+            # Per-agent custom LLM. `llm` names either a capability profile
+            # ("high_thinking", "fast_writer") or an explicit model ("gpt-4o").
+            # A profile supplies its own behaviour (reasoning effort, temperature,
+            # output budget) and llm_configs override it; an explicit model keeps
+            # the previous generic defaults.
             if self.llm and ctxt.llm_factory and ctxt.jwt_token:
-                llm_params = {
-                    "temperature": 0.7,
-                    "max_tokens": 4000,
-                }
-                if self.llm_configs:
-                    llm_params.update(self.llm_configs)
+                # An unknown name is not an error: it is a model name, which is how
+                # every crew definition predating profiles behaves.
+                from llm_factory import get_profile
 
-                logger.info("Creating custom LLM for agent %s with model %s and params %s", self.name, self.llm, llm_params)
                 try:
-                    custom_llm = ctxt.llm_factory.create_llm(
-                        jwt_token=ctxt.jwt_token,
-                        model=self.llm,
-                        **llm_params
-                    )
-                    d['llm'] = custom_llm
+                    profile = get_profile(self.llm)
+                except ValueError:
+                    profile = None
+
+                llm_params = dict(self.llm_configs or {})
+                if profile is None:
+                    llm_params = {"temperature": 0.7, "max_tokens": 4000} | llm_params
+
+                try:
+                    if profile is not None:
+                        logger.info(
+                            "Creating LLM for agent %s from profile %s (model %s) with overrides %s",
+                            self.name, profile.name, profile.model(), llm_params
+                        )
+                        jwt_token = ctxt.jwt_token.split("Bearer ")[1] if "Bearer " in ctxt.jwt_token else ctxt.jwt_token
+                        d["llm"] = ctxt.llm_factory.create_llm_for_profile(
+                            profile,
+                            jwt_token=jwt_token,
+                            **llm_params
+                        )
+                    # else:
+                        # logger.info("Creating custom LLM for agent %s with model %s and params %s", self.name, self.llm, llm_params)
+                        # custom_llm = ctxt.llm_factory.create_llm(
+                        #     jwt_token=ctxt.jwt_token,
+                        #     model=self.llm,
+                        #     **llm_params
+                        # )
                 except Exception as e:
                     logger.warning(
                         f"Failed to create custom LLM for agent {self.name}: {e}. "
                         f"Using crew default."
                     )
                     d.pop('llm', None)
+            # else:
+                # d.pop('llm', None)  # Use crew's LLM
+            if self.skills:
+                ctxt.download_skills(self.skills)
+                d['skills'] = [ctxt.skill_manager.skills_dir]
             else:
-                d.pop('llm', None)  # Use crew's LLM
-            
+                d.pop('skills')
             d.update(**kwargs)
             d["max_execution_time"]=AGENT_MAX_EXECUTION_TIME
             agent = Agent(**d)
@@ -327,6 +415,7 @@ class CrewA(BaseModel):
         planning_llm: Optional[LLM] = None,
         embedder: Optional[dict] = None,
         inputs_dir: Optional[str] = None,
+        run_dir: Optional[str] = None,
         knowledge_sources: Optional[list] = None,
         **kwargs
     ) -> Crew:
@@ -341,6 +430,7 @@ class CrewA(BaseModel):
         Updated: Uses CrewBuilder for two-pass task context resolution
         Updated: Added embedder parameter for JWT-authenticated embeddings
         Updated: Added knowledge_sources parameter for previous crew outputs
+        Updated: Added run_dir - the job's writable working directory
         """
         # Import here to avoid circular dependency
         from llm_factory import get_llm_factory
@@ -352,6 +442,7 @@ class CrewA(BaseModel):
         ctxt = Context(
             vectordb_config=create_vectordb_config(job_id, jwt_token),
             inputs_dir=inputs_dir,
+            run_dir=run_dir,
             llm_factory=get_llm_factory() if jwt_token else None,
             embedder=embedder,
             job_context=job_context,
