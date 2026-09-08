@@ -32,7 +32,7 @@ RUN mkdir /.mem0 && chmod 777 /.mem0
 RUN mkdir -p /app/runs && chmod 777 /app/runs
 
 # VERSION INFORMATION
-ARG VERSION 2.1.2
+ARG VERSION 2.1.3
 ENV VERSION=$VERSION
 
 # ALERT!!! Should NOT copy keys into docker container
