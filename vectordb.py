@@ -9,10 +9,9 @@ Updated:
 import os
 from pathlib import Path
 import chromadb
-from chromadb.config import Settings
+
 from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
 
-BASE_DIR = os.getenv("IVCAP_RUNS_BASE_DIR", "/tmp")
 os.environ["CHROMA_OPENAI_API_KEY"] = os.environ.get("OPENAI_API_KEY", "NA")
 def create_vectordb_config(job_id: str, jwt_token) -> dict:
     """
@@ -27,7 +26,7 @@ def create_vectordb_config(job_id: str, jwt_token) -> dict:
         Configuration dict for CrewAI tools (WebsiteSearchTool, etc.)
     """
     # Create job-specific directory for ChromaDB
-    persist_dir = Path(f"{BASE_DIR}/runs/{job_id}")
+    persist_dir = Path(f"{os.getcwd()}/runs/{job_id}")
     persist_dir.mkdir(parents=True, exist_ok=True)
     
     # Create ChromaDB client with persistent storage

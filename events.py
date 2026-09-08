@@ -74,7 +74,7 @@ class _LlmCallFailedEvent(BaseEvent):
     error: str  = Field(description="Error reported")
     task: Optional[str] = Field(None, description="Name of task this error occurs in")
 
-from ivcap_ai_tool import (get_event_reporter, get_job_id)
+from ivcap_lambda import (get_event_reporter, get_job_id)
 
 class EventListener(BaseEventListener):
     def __init__(self):
@@ -155,7 +155,7 @@ class EventListener(BaseEventListener):
             id = self._id(source)
             logger.info(f"{get_job_id()}: tool {id} started")
             if (r := get_event_reporter()):
-                event = _ToolStartedEvent(id=id, tool_name=e.tool_name, tool_args=e.tool_args, agent=e.agent_role)
+                event = _ToolStartedEvent(id=id, tool_name=e.tool_name, tool_args=str(e.tool_args), agent=e.agent_role)
                 r.emit(event)
 
         @bus.on(ToolUsageFinishedEvent)

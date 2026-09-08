@@ -11,7 +11,7 @@ Changes:
 - Crew building now uses CrewBuilder for proper task context resolution
 - Added planning_llm with JWT authentication to support planning feature
 - Added LLM validation test calls to catch authentication issues early
-- Fixed JWT extraction to use job_authorization attribute (ivcap-ai-tool v0.7.17+)
+- Fixed JWT extraction to use job_authorization attribute (ivcap-lambda/ivcap-ai-tool v0.7.17+)
 - Added task output files: saves each task and final output to runs/{job_id}/outputs/
 - Added litellm.drop_params configuration to prevent parameter conflicts
 - Added embedder configuration for JWT-authenticated embeddings via LiteLLM proxy
@@ -35,12 +35,13 @@ import shutil
 from pathlib import Path
 from typing import Optional, Union
 from dotenv import load_dotenv
-
+from langfuse import get_client, propagate_attributes
 load_dotenv()
 
 # Disable telemetry BEFORE importing CrewAI
-os.environ["OTEL_SDK_DISABLED"] = "true"
-os.environ["CREWAI_DISABLE_TELEMETRY"] = "true"
+TRACING_ENABLED = os.environ.get("SERVICE_TRACING_ENABLED", "False") == "True"
+os.environ["OTEL_SDK_DISABLED"] = str(not TRACING_ENABLED)
+os.environ["CREWAI_DISABLE_TELEMETRY"] = str(not TRACING_ENABLED)
 
 # Configure LiteLLM drop_params to prevent parameter conflicts
 import litellm
@@ -64,7 +65,7 @@ from crewai_tools import (
 from fastapi.exceptions import HTTPException
 
 from ivcap_service import getLogger, Service, JobContext, get_secret
-from ivcap_ai_tool import start_tool_server, ToolOptions, ivcap_ai_tool, logging_init
+from ivcap_lambda import start_lambda_server, ToolOptions, ivcap_lambda, logging_init
 from ivcap_client import IVCAP
 from ivcap_client.exception import ResourceNotFound
 
@@ -83,6 +84,7 @@ from tools.pubmed import (
 )
 
 from download_manager import DownloadManager, DownloadResult
+from openinference.instrumentation.crewai import CrewAIInstrumentor
 
 # Initialize logging
 logging_init("./logging.json")
@@ -92,12 +94,14 @@ logger = getLogger("app")
 try:
     get_secret("SERPER_API_KEY")
     get_secret("NCBI_API_KEY")
+    if TRACING_ENABLED:
+        get_secret("LANGFUSE_SECRET_KEY")
+        get_secret("LANGFUSE_PUBLIC_KEY")
 except Exception as e:
     logger.error(
         "failed to load SERPER_API_KEY key, will impact the SERPER search tool functionality %s",
         e,
     )
-
 # Define IVCAP service metadata
 service = Service(
     name="IVCAP CrewAI Service",
@@ -111,6 +115,15 @@ service = Service(
         "url": "https://opensource.org/license/MIT",
     },
 )
+
+if TRACING_ENABLED:
+    CrewAIInstrumentor().instrument(skip_dep_check=True)
+    langfuse_client = get_client()
+    # Verify connection
+    if langfuse_client.auth_check():
+        logger.info("Langfuse client is authenticated and ready!")
+    else:
+        logger.info("Authentication failed. Please check your credentials and host.")
 
 # ============================================================================
 # REQUEST / RESPONSE MODELS
@@ -211,8 +224,8 @@ add_supported_tools(
             jwt_token=ctxt.jwt_token,
             litellm_proxy_url=os.getenv("LITELLM_PROXY"),
             model="gemini-2.5-pro",
-            job_folder=f"{ctxt.tmp_dir}/runs/{ctxt.job_id}",
-            metadata_file=f"{ctxt.tmp_dir}/runs/{ctxt.job_id}/url_metadata.json",
+            job_folder=ctxt.run_dir,
+            metadata_file=f"{ctxt.run_dir}/url_metadata.json",
         ),
         # IVCAP LangGraph Deep Research Tool - comprehensive web research agent
         "urn:ivcap:service:dcdc770b-d276-5df5-b5b7-babf17fa6eb7": create_langgraph_tool,
@@ -296,7 +309,7 @@ def get_auth_token(job_ctxt: JobContext) -> Optional[str]:
     Returns:
         JWT token string without "Bearer " prefix, or None
     """
-    # Path 1: job_authorization attribute (ivcap-ai-tool v0.7.17+)
+    # Path 1: job_authorization attribute (ivcap-lambda v0.7.25+)
     if hasattr(job_ctxt, "job_authorization"):
         token = job_ctxt.job_authorization
         if token:
@@ -408,13 +421,12 @@ def create_authenticated_llm(
 
     return llm, planning_llm, embedder_config, factory.litellm_proxy_url
 
-
 # ============================================================================
 # MAIN ENDPOINT
 # ============================================================================
 
 
-@ivcap_ai_tool("/", opts=ToolOptions(tags=["CrewAI Runner"]))
+@ivcap_lambda("/", opts=ToolOptions(tags=["CrewAI Runner"]))
 async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
     """
     Execute CrewAI crew with artifact support and authentication.
@@ -436,39 +448,40 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         Crew execution response with results
     """
     # Initialize managers
-    download_mgr = DownloadManager(job_context=jobCtxt)
-    citation_mgr = None
+    
+    download_mgr = None
     download_result: Optional[DownloadResult] = None
     inputs_dir = None
     crew = None
+    runs_root = Path(os.getcwd(), "runs")
+    runs_base_dir = f"{runs_root}/{jobCtxt.job_id}"
     try:
         # ==================== STEP 1: AUTHENTICATION ====================
         jwt_token = get_auth_token(jobCtxt)
         # Get base directory from environment (default: /tmp)
-        runs_base_dir = os.getenv("IVCAP_RUNS_BASE_DIR", "/tmp")
-
+        # runs_base_dir = os.getenv("IVCAP_RUNS_BASE_DIR", f"{os.getcwd()}/runs")
         if jwt_token:
             logger.info(
                 f"✓ JWT token detected for LLM authentication (length: {len(jwt_token)})"
             )
-            os.environ["CREWAI_STORAGE_DIR"] = f"{runs_base_dir}/runs/{jobCtxt.job_id}"
-            logger.info(
-                f"✓ Set CREWAI_STORAGE_DIR for complete job isolation: {os.environ['CREWAI_STORAGE_DIR']}"
-            )
+            # os.environ["CREWAI_STORAGE_DIR"] = runs_base_dir
+            # logger.info(
+            #     f"✓ Set CREWAI_STORAGE_DIR for complete job isolation: {os.environ['CREWAI_STORAGE_DIR']}"
+            # )
         else:
             logger.warning(
                 "✗ No JWT token found - LLM calls will fall back to direct OpenAI API"
             )
-            os.environ["CREWAI_STORAGE_DIR"] = f"{runs_base_dir}/runs/{jobCtxt.job_id}"
-            logger.info(
-                f"✓ Set CREWAI_STORAGE_DIR for job isolation (no JWT): {os.environ['CREWAI_STORAGE_DIR']}"
-            )
+            # os.environ["CREWAI_STORAGE_DIR"] = runs_base_dir
+            # logger.info(
+            #     f"✓ Set CREWAI_STORAGE_DIR for job isolation (no JWT): {os.environ['CREWAI_STORAGE_DIR']}"
+            # )
 
         # ==================== STEP 2: ARTIFACTS ====================
         ivcap = jobCtxt.ivcap
         if req.context_urns:
             logger.info(f"Downloading {len(req.context_urns)} artifacts...")
-
+            download_mgr = DownloadManager(job_context=jobCtxt, input_dir_parent=runs_base_dir)
             download_result = download_mgr.download(req.context_urns)
 
             if download_result:
@@ -667,7 +680,9 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
 
                 try:
                     artifact_knowledge_sources = (
-                        create_knowledge_sources_from_artifacts(inputs_dir)
+                        create_knowledge_sources_from_artifacts(
+                            inputs_dir, jobCtxt.job_id
+                        )
                     )
                     logger.info(
                         f"✓ Created {len(artifact_knowledge_sources)} artifact knowledge sources"
@@ -737,6 +752,7 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
             planning_llm=planning_llm,
             embedder=embedder_config,
             inputs_dir=inputs_dir,
+            run_dir=runs_base_dir,
             knowledge_sources=knowledge_sources,
             memory=False,
             verbose=False,
@@ -765,7 +781,7 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         start_time = (time.process_time(), time.time())
 
         # Create outputs directory
-        outputs_dir = Path(f"{runs_base_dir}/runs/{jobCtxt.job_id}/outputs")
+        outputs_dir = Path(f"{runs_base_dir}/outputs")
         outputs_dir.mkdir(parents=True, exist_ok=True)
         logger.info("Created outputs directory: %s", outputs_dir)
         req.inputs["job_id"] = jobCtxt.job_id
@@ -793,7 +809,23 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
         logger.info("Starting crew with inputs %s", req.inputs)
         crew_result = None
         try:
-            crew_result = crew.kickoff(req.inputs)
+            if TRACING_ENABLED:
+                trace_id = langfuse_client.create_trace_id(seed=jobCtxt.job_id)
+                # Propagate correlating attributes to the root span and every child
+                # observation, so session cost includes the cost-bearing generations.
+                with propagate_attributes(
+                    session_id=jobCtxt.job_id,
+                    trace_name=crew_def.name,
+                    environment=os.getenv("LANGFUSE_TRACING_ENVIRONMENT", "local"),
+                ):
+                    with langfuse_client.start_as_current_observation(as_type="span", name=crew_def.name, trace_context={"trace_id": trace_id}) as root_span:
+                        crew_result = crew.kickoff(req.inputs)
+                        root_span.update(
+                            input={"query": req.inputs},
+                            output={"response": crew_result.raw},
+                        )
+            else:
+                crew_result = crew.kickoff(req.inputs)
         except Exception as exp:
             logger.exception("error when executing crew")
             raise HTTPException(status_code=503, detail="Error in Crewai execution") from exp
@@ -868,14 +900,23 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
     finally:
         # ==================== CLEANUP ====================
         # Always cleanup artifacts and temporary files, even on failure
-        if inputs_dir:
+        if inputs_dir and download_mgr:
             download_mgr.cleanup()
         if crew and knowledge_sources:
             crew.reset_memories('knowledge')
-        # Clean up researcher links file (used for reference validation)
-        runs_base_dir = os.getenv("IVCAP_RUNS_BASE_DIR", "/tmp")
-        job_dir = Path(f"{runs_base_dir}/runs/{jobCtxt.job_id}/")
-        if os.path.exists(job_dir):
+        # Remove this job's directory (artifacts, skills, outputs, tool scratch files).
+        # Only ever delete a directory strictly *below* runs/ - never runs/ itself, and
+        # never anything outside it. runs_base_dir is interpolated from job_id, so a
+        # malformed or traversing job_id would otherwise turn this into an rmtree of
+        # the shared runs/ root, destroying concurrent jobs.
+        job_dir = Path(runs_base_dir).resolve()
+        if runs_root.resolve() not in job_dir.parents:
+            logger.error(
+                "Refusing to delete %s - not a job directory under %s",
+                job_dir,
+                runs_root,
+            )
+        elif job_dir.exists():
             try:
                 shutil.rmtree(job_dir)
                 logger.info("Contents of directory %s removed successfully.", job_dir)
@@ -891,4 +932,4 @@ async def crew_runner(req: CrewRequest, jobCtxt: JobContext) -> CrewResponse:
 
 if __name__ == "__main__":
     # Start server (port is configured in pyproject.toml via poetry-plugin-ivcap)
-    start_tool_server(service)
+    start_lambda_server(service)

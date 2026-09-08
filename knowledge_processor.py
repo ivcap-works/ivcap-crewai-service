@@ -94,26 +94,31 @@ def create_knowledge_sources_from_inputs(
     return sources
 
 
-def create_knowledge_sources_from_artifacts(inputs_dir: str) -> List:
+def create_knowledge_sources_from_artifacts(inputs_dir: str, job_id: str) -> List:
     """
     Convert downloaded artifacts into CrewAI Knowledge sources.
-    
+
     This function takes a directory of downloaded artifacts and creates appropriate
     knowledge source instances based on file types. Agents in the crew will automatically
     have semantic search access to these sources via RAG.
-    
+
     Args:
         inputs_dir: Directory path containing downloaded artifacts (PDFs, text files)
-    
+        job_id: Job identifier, used as the ChromaDB collection name so knowledge
+                is isolated per job. Must NOT be a filesystem path: CrewAI prefixes
+                the name with "knowledge_" and ChromaDB truncates the result to 63
+                characters, so a long path loses its unique tail and every job ends
+                up sharing one collection.
+
     Returns:
         List of knowledge source instances (PDFKnowledgeSource, TextFileKnowledgeSource).
         Empty list if inputs_dir is None or doesn't exist.
-    
+
     Example:
         >>> inputs_dir = "runs/job-123/inputs"  # Contains faw1.pdf, faw2.pdf
-        >>> sources = create_knowledge_sources_from_artifacts(inputs_dir)
+        >>> sources = create_knowledge_sources_from_artifacts(inputs_dir, "job-123")
         >>> crew = Crew(agents=[...], tasks=[...], knowledge_sources=sources)
-    
+
     Notes:
         - PDF files are converted to PDFKnowledgeSource instances
         - Text files (.txt, .md, .csv) are converted to TextFileKnowledgeSource instances
@@ -141,7 +146,8 @@ def create_knowledge_sources_from_artifacts(inputs_dir: str) -> List:
                 metadata={
                     "source_type": "artifact_pdf",
                     "filename": str(pdf_files),
-                }
+                },
+                collection_name=job_id
             )
             sources.append(source)
             logger.info("✓ PDF knowledge source: %s", str(pdf_files))
@@ -159,7 +165,8 @@ def create_knowledge_sources_from_artifacts(inputs_dir: str) -> List:
                     metadata={
                         "source_type": "artifact_text",
                         "filename": str(text_files),
-                    }
+                    },
+                    collection_name=job_id
                 )
                 sources.append(source)
                 logger.info("✓ Text knowledge source: %s", str(text_files))
@@ -174,7 +181,8 @@ def create_knowledge_sources_from_artifacts(inputs_dir: str) -> List:
                 metadata={
                     "source_type": "previous_crew_output",
                     "filename": str(json_files),
-                }
+                },
+                collection_name=job_id
             )
             sources.append(source)
             logger.info("✓ JSON knowledge source: %s", str(json_files))

@@ -257,7 +257,7 @@ class CrewBuilder:
             "verbose": crew_spec.verbose if isinstance(crew_spec.verbose, bool) else True,
             "planning": crew_spec.planning if crew_spec.planning is not None else False,
             "cache": crew_spec.cache if crew_spec.cache is not None else True,
-            "memory": crew_spec.memory if crew_spec.memory is not None else False,
+            "memory": False,
         }
         
         # Add embedder if provided

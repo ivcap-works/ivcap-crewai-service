@@ -205,7 +205,7 @@ Tasks reference previous tasks by name in their `context` field:
 ### JWT Authentication Flow
 
 The service supports 4 fallback paths for extracting JWT tokens:
-1. `job_ctxt.job_authorization` (ivcap-ai-tool v0.7.17+)
+1. `job_ctxt.job_authorization` (ivcap-lambda v0.7.25+)
 2. `job_ctxt.auth_token` (older versions)
 3. `job_ctxt.headers['Authorization']` (HTTP headers)
 4. `job_ctxt.request.headers['Authorization']` (nested request)
