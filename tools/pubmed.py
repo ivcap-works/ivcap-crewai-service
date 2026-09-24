@@ -149,7 +149,7 @@ class PubMedCentralSearchInput(BaseModel):
     """Input parameters for PubMedSearchTool."""
     query: str = Field(..., description="The query term or phrase to search for in PubMedCentral.")
     article_type:str = Field(default="review", description="The type of articles to search for in PubMedCentral, e.g., 'research or review'.")
-    num_of_documents: int = Field(default=10, description="The maximum number of documents to return.")
+    num_of_documents: int = Field(default=5, description="The maximum number of documents to return.")
 
 class PubMedCentralSearchByTerm(BaseTool):
     """Searches PubMed Central database using search terms for scientific literature."""
@@ -160,7 +160,7 @@ class PubMedCentralSearchByTerm(BaseTool):
     )
     args_schema: Type[BaseModel] = PubMedCentralSearchInput
 
-    def _run(self, query: str, article_type: str="review", num_of_documents: int = 10) -> str:
+    def _run(self, query: str, article_type: str="review", num_of_documents: int = 5) -> str:
         try:
             filter_str=""
             if article_type == 'review':
@@ -169,7 +169,7 @@ class PubMedCentralSearchByTerm(BaseTool):
                 filter_str = "research article[Filter]"
             if filter_str:
                 query = f"{query} AND {filter_str}"
-            pmids = query_pmc_by_term(query, num_of_documents)
+            pmids = query_pmc_by_term(query, min(num_of_documents, 5))
             if not pmids:
                 return f"No results found for search query: '{query}'"
             return query_pmc_by_pmid(pmids)
