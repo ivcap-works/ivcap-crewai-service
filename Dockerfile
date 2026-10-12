@@ -50,7 +50,7 @@ ENV SERVICE_TRACING_ENABLED=True
 ENV AGENT_MAX_EXECUTION_TIME=1200
 ENV LANGFUSE_BASE_URL=https://us.cloud.langfuse.com
 ENV LANGFUSE_TRACING_ENVIRONMENT=dev
-ENV NO_PROXY="localhost,127.0.0.1,us.cloud.langfuse.com,.langfuse.com"
-ENV no_proxy="localhost,127.0.0.1,us.cloud.langfuse.com,.langfuse.com"
+ENV NO_PROXY="localhost,127.0.0.1,us.cloud.langfuse.com,.langfuse.com, google.serper.dev"
+ENV no_proxy="localhost,127.0.0.1,us.cloud.langfuse.com,.langfuse.com, google.serper.dev"
 
 ENTRYPOINT ["python", "/app/service.py", "--port", "80"]
